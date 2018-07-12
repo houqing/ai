@@ -13,8 +13,6 @@ import tensorflow as tf
 
 fa="./data_a"
 fb="./data_b"
-#fa = "/home/l00395915/zhusiyu/nvcaffe-0.16.6-noise-svn/outputData/res4_1_conv1-dweight-iter-0.bin"
-#fb = "/home/l00395915/zhusiyu/nvcaffe-0.16.6-noise-svn/outputData/res4_1_conv1-dweight-noised-iter-0.bin"
 
 fa_len = os.stat(fa).st_size
 fb_len = os.stat(fb).st_size
