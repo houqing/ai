@@ -1,7 +1,10 @@
+#!/usr/bin/env python3
+
+import os
+
 import tensorflow as tf
 
-
-#jam_me_module = tf.load_op_library('./jamme-op.so')
+jam_me_module = tf.load_op_library("jamme-op.so")
 
 with tf.device('/device:GPU:0'):
     inp = tf.constant([5., 4., 3., 2., 1.], dtype=tf.float16)

@@ -11,7 +11,7 @@ clean:
 	rm -f jamme-op.cu.o jamme-op.so
 
 t:
-	python jamme-op-example.py
+	python ../example/jamme-op-example.py
 
 a:
 	nvcc -std=c++11 -c -o jamme-op.cu.o jamme-op.cu.cc ${TF_CFLAGS[@]} $(TF_CFLAGS) -D GOOGLE_CUDA=1 -x cu -Xcompiler -fPIC \
