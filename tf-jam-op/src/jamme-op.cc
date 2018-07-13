@@ -3,6 +3,8 @@
 
 #include "jamme-op.h"
 
+#include <stdlib.h>
+
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
 
@@ -25,21 +27,25 @@
 #include "tensorflow/core/platform/types.h"
 #include "tensorflow/core/util/work_sharder.h"
 
+#include "tensorflow/core/framework/common_shape_fns.h"
+#include "tensorflow/core/framework/op.h"
+#include "tensorflow/core/framework/shape_inference.h"
+
 
 #if 1
 #if GOOGLE_CUDA
 #include "tensorflow/core/common_runtime/gpu/gpu_event_mgr.h"
+#include "tensorflow/core/platform/types.h"
 #include "tensorflow/core/platform/cuda.h"
 #include "tensorflow/core/platform/stream_executor.h"
 
-//using ::perftools::gputools::cuda::ScopedActivateExecutorContext;
+//#include "cuda/inlcude/cuda.h"
+//#include "cuda/inlcude/curand.h"
+//#include "cuda/include/curand_kernel.h"
+
 #endif	// GOOGLE_CUDA
 #endif
 
-
-#include "tensorflow/core/framework/common_shape_fns.h"
-#include "tensorflow/core/framework/op.h"
-#include "tensorflow/core/framework/shape_inference.h"
 
 
 #if 1
@@ -104,12 +110,34 @@ class JamMeOp : public OpKernel {
   void Compute(OpKernelContext* ctx) override {
     const Tensor& in = ctx->input(0);
 
+    auto* stream = ctx->op_device_context()->stream();
+    OP_REQUIRES(ctx, stream, errors::Internal("No GPU stream avalible"));
+
     Tensor* jam = NULL;
     OP_REQUIRES_OK(ctx, ctx->allocate_output(0, in.shape(), &jam));
     Tensor* out = NULL;
     OP_REQUIRES_OK(ctx, ctx->allocate_output(1, in.shape(), &out));
     Tensor* sim = NULL;
     OP_REQUIRES_OK(ctx, ctx->allocate_output(2, TensorShape({}), &sim));
+
+//    Bitcast(out, float)
+    auto rand_data_float = perftools::gputools::DeviceMemory<float>::MakeFromByteSize(out->template flat<T>().data(), out->template flat<T>().size() * sizeof(T));
+//    auto rand_data = AsDeviceMemory(out->template flat<T>().data(), out->template flat<T>().size());
+    if (is_rand_initialized_ == false) {
+        int i;
+        const uint8 seed_data[16] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
+        uint64 seed_bytes = 16;
+        bool launch_status;
+        launch_status = stream->ThenSetRngSeed(seed_data, seed_bytes).ok();
+        OP_REQUIRES(ctx, launch_status, errors::Internal("JamMe rand seed failed"));
+        is_rand_initialized_ = true;
+    }
+
+    bool launch_status;
+    launch_status = stream->ThenPopulateRandUniform(&rand_data_float).ok();
+    OP_REQUIRES(ctx, launch_status, errors::Internal("JamMe rand gen failed"));
+
+//    Bitcast(out, T)
 
     functor::JamMeFunctor<Device, T>()(
         ctx,
@@ -119,6 +147,9 @@ class JamMeOp : public OpKernel {
         jam->flat<T>().data(),
 	(float*)sim->flat<float>().data());
   }
+
+  private:
+  int is_rand_initialized_ = false;
 };
 
 template <typename Device, typename T>

@@ -24,7 +24,7 @@ __global__ void JamMeCudaKernel(const int nthreads, const T* in, T* jam, T* out,
   CUDA_1D_KERNEL_LOOP(idx, nthreads) {
     unsigned short b;
     b = __half_as_ushort(in[idx]) & HALF_MANTISSA_BIT_MASK;
-    out[idx] = in[idx];
+//    out[idx] = in[idx];
     if ((b + a) > b) {
       jam[idx] = __ushort_as_half(__half_as_ushort(in[idx]) + a);
     }
