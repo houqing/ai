@@ -10,7 +10,7 @@
 +from tensorflow.python.framework.dtypes import float16
 +
 +
-+#jamme_mod = load_op_library('jamme-op.so')
++jamme_mod = load_op_library('jamme-op.so')
 +
 +
  # Warn the user if we convert a sparse representation to dense with at

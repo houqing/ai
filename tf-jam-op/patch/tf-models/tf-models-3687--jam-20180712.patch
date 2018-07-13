@@ -6,7 +6,7 @@
  
 +
 +from tensorflow.python.framework import ops
-+jamme_mod = tf.load_op_library('./jamme-op.so')
++jamme_mod = tf.load_op_library('jamme-op.so')
 +
 +
 +#ops.NotDifferentiable("JamMe")
