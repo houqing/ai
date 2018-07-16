@@ -10,7 +10,8 @@
 #include "cuda/include/cuda_fp16.h"
 
 
-#define HALF_MANTISSA_BIT_MASK	(0x3ff)
+#define HALF_EXPONENT_BIT_MASK	(0x7c00)
+#define HALF_MANTISSA_BIT_MASK	(0x03ff)
 
 // 
 #define JAM_BIT_NUM	0x2
@@ -81,7 +82,7 @@ __global__ void JamMeRandCudaKernel_TODO(const int nthreads, const T* in, T* jam
 #if 0
     jam[idx] = in[idx];
 #else
-    if (((in[idx] != __ushort_as_half(0)) && ((__half_as_ushort(out[idx]) % 100) < JAM_BIT_RATIO))) {
+    if (((__half_as_ushort(in[idx]) & HALF_EXPONENT_BIT_MASK) != 0) && ((__half_as_ushort(out[idx]) % 100) < JAM_BIT_RATIO)) {
 	    unsigned short mi;
 	    unsigned short jv;
 	    mi = __half_as_ushort(in[idx]) & HALF_MANTISSA_BIT_MASK;
@@ -93,7 +94,7 @@ __global__ void JamMeRandCudaKernel_TODO(const int nthreads, const T* in, T* jam
 			    jam[idx] = __ushort_as_half(__half_as_ushort(in[idx]) + jv);
 		    } else {
 			    jam[idx] = in[idx];
-			    jam[idx] = __ushort_as_half(0x3e00);
+//			    jam[idx] = __ushort_as_half(0x3e00);
 		    }
 	    } else {
 		    if ((mi + jv) > mi) {
@@ -102,13 +103,13 @@ __global__ void JamMeRandCudaKernel_TODO(const int nthreads, const T* in, T* jam
 			    jam[idx] = __ushort_as_half(__half_as_ushort(in[idx]) - jv);
 		    } else {
 			    jam[idx] = in[idx];
-			    jam[idx] = __ushort_as_half(0x3f00);
+//			    jam[idx] = __ushort_as_half(0x3f00);
 		    }
 	    }
 	    //out[idx] = in[idx];
     } else {
 	    jam[idx] = in[idx];
-	    jam[idx] = __ushort_as_half(0x3b00);
+//	    jam[idx] = __ushort_as_half(0x3b00);
     }
 #endif
 
