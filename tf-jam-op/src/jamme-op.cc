@@ -39,16 +39,11 @@
 #include "tensorflow/core/platform/cuda.h"
 #include "tensorflow/core/platform/stream_executor.h"
 
-//#include "cuda/inlcude/cuda.h"
-//#include "cuda/inlcude/curand.h"
-//#include "cuda/include/curand_kernel.h"
-
 #endif	// GOOGLE_CUDA
 #endif
 
 
 
-#if 1
 namespace tensorflow {
 
 REGISTER_OP("JamMe")
@@ -92,7 +87,6 @@ REGISTER_OP_GRADIENT("JamMe", JamMeGrad);
 #endif
 
 }
-#endif
 
 
 namespace tensorflow {
@@ -110,9 +104,6 @@ class JamMeOp : public OpKernel {
   void Compute(OpKernelContext* ctx) override {
     const Tensor& in = ctx->input(0);
 
-    auto* stream = ctx->op_device_context()->stream();
-    OP_REQUIRES(ctx, stream, errors::Internal("No GPU stream avalible"));
-
     Tensor* jam = NULL;
     OP_REQUIRES_OK(ctx, ctx->allocate_output(0, in.shape(), &jam));
     Tensor* out = NULL;
@@ -120,9 +111,13 @@ class JamMeOp : public OpKernel {
     Tensor* sim = NULL;
     OP_REQUIRES_OK(ctx, ctx->allocate_output(2, TensorShape({}), &sim));
 
+#if 1
+    auto* stream = ctx->op_device_context()->stream();
+    OP_REQUIRES(ctx, stream, errors::Internal("No GPU stream avalible"));
+
 //    Bitcast(out, float)
     auto rand_data_float = perftools::gputools::DeviceMemory<float>::MakeFromByteSize(out->template flat<T>().data(), out->template flat<T>().size() * sizeof(T));
-//    auto rand_data = AsDeviceMemory(out->template flat<T>().data(), out->template flat<T>().size());
+#if 0
     if (is_rand_initialized_ == false) {
         int i;
         const uint8 seed_data[16] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
@@ -132,19 +127,22 @@ class JamMeOp : public OpKernel {
         OP_REQUIRES(ctx, launch_status, errors::Internal("JamMe rand seed failed"));
         is_rand_initialized_ = true;
     }
+#endif
 
     bool launch_status;
     launch_status = stream->ThenPopulateRandUniform(&rand_data_float).ok();
     OP_REQUIRES(ctx, launch_status, errors::Internal("JamMe rand gen failed"));
 
 //    Bitcast(out, T)
+    auto rand_data_orig = perftools::gputools::DeviceMemory<T>::MakeFromByteSize(out->template flat<T>().data(), out->template flat<T>().size() * sizeof(T));
+#endif
 
     functor::JamMeFunctor<Device, T>()(
         ctx,
         static_cast<const int>(in.NumElements()),
         in.flat<T>().data(),
-        out->flat<T>().data(),
         jam->flat<T>().data(),
+        out->flat<T>().data(),
 	(float*)sim->flat<float>().data());
   }
 
