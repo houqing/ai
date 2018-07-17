@@ -4,6 +4,9 @@
 #include "jamme-op.h"
 
 #include <stdlib.h>
+#include <fstream>
+#include <functional>
+#include <string>
 
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
@@ -11,9 +14,9 @@
 #include "tensorflow/core/framework/function.h"
 #include "tensorflow/core/util/padding.h"
 #include "tensorflow/core/util/tensor_format.h"
-
-#include <functional>
-#include <string>
+#include "tensorflow/core/common_runtime/dma_helper.h"
+#include "tensorflow/core/common_runtime/device.h"
+#include "tensorflow/core/lib/core/status.h"
 
 #include "third_party/eigen3/unsupported/Eigen/CXX11/Tensor"
 #include "tensorflow/core/framework/register_types.h"
@@ -43,11 +46,15 @@
 #endif
 
 
+#define JAM_ENABLE_DUMP_DATA	1
+
+
 
 namespace tensorflow {
 
 REGISTER_OP("JamMe")
 .Input("in: T")
+.Input("info: string")
 .Output("jam: T")
 .Output("out: T")
 .Output("sim: float")
@@ -96,24 +103,41 @@ typedef Eigen::GpuDevice GPUDevice;
 
 
 template <typename Device, typename T>
-class JamMeOp : public OpKernel {
+class JamMeOp : public AsyncOpKernel {
   public:
-  explicit JamMeOp(OpKernelConstruction* context) : OpKernel(context) {
+  explicit JamMeOp(OpKernelConstruction* context) : AsyncOpKernel(context) {
+#ifdef JAM_ENABLE_DUMP_DATA
+#endif
   }
 
-  void Compute(OpKernelContext* ctx) override {
+  void ComputeAsync(OpKernelContext* ctx, DoneCallback done) override {
     const Tensor& in = ctx->input(0);
+    const Tensor& info = ctx->input(1);
+
+#ifdef JAM_ENABLE_DUMP_DATA
+    string filename_dat = std::to_string(ctx->step_id()) + "++" + info.scalar<string>()() + "+dat";
+    string filename_jam = std::to_string(ctx->step_id()) + "++" + info.scalar<string>()() + "+jam";
+#endif
+
+#if 0
+    std::cout << "JamMeOp:"
+	    << " info=" << filename_dat
+	    << " step=" << ctx->step_id()
+	    << " k.name=" << ctx->op_kernel().name()
+	    << " k.type=" << ctx->op_kernel().type_string()
+	    << std::endl;
+#endif
 
     Tensor* jam = NULL;
-    OP_REQUIRES_OK(ctx, ctx->allocate_output(0, in.shape(), &jam));
+    OP_REQUIRES_OK_ASYNC(ctx, ctx->allocate_output(0, in.shape(), &jam), done);
     Tensor* out = NULL;
-    OP_REQUIRES_OK(ctx, ctx->allocate_output(1, in.shape(), &out));
+    OP_REQUIRES_OK_ASYNC(ctx, ctx->allocate_output(1, in.shape(), &out), done);
     Tensor* sim = NULL;
-    OP_REQUIRES_OK(ctx, ctx->allocate_output(2, TensorShape({}), &sim));
+    OP_REQUIRES_OK_ASYNC(ctx, ctx->allocate_output(2, TensorShape({}), &sim), done);
 
 #if 1
     auto* stream = ctx->op_device_context()->stream();
-    OP_REQUIRES(ctx, stream, errors::Internal("No GPU stream avalible"));
+    OP_REQUIRES_ASYNC(ctx, stream, errors::Internal("No GPU stream avalible"), done);
 
 //    Bitcast(out, float)
     auto rand_data_float = perftools::gputools::DeviceMemory<float>::MakeFromByteSize(out->template flat<T>().data(), out->template flat<T>().size() * sizeof(T));
@@ -124,14 +148,14 @@ class JamMeOp : public OpKernel {
         uint64 seed_bytes = 16;
         bool launch_status;
         launch_status = stream->ThenSetRngSeed(seed_data, seed_bytes).ok();
-        OP_REQUIRES(ctx, launch_status, errors::Internal("JamMe rand seed failed"));
+        OP_REQUIRES_ASYNC(ctx, launch_status, errors::Internal("JamMe rand seed failed"), done);
         is_rand_initialized_ = true;
     }
 #endif
 
     bool launch_status;
     launch_status = stream->ThenPopulateRandUniform(&rand_data_float).ok();
-    OP_REQUIRES(ctx, launch_status, errors::Internal("JamMe rand gen failed"));
+    OP_REQUIRES_ASYNC(ctx, launch_status, errors::Internal("JamMe rand gen failed"), done);
 
 //    Bitcast(out, T)
     auto rand_data_orig = perftools::gputools::DeviceMemory<T>::MakeFromByteSize(out->template flat<T>().data(), out->template flat<T>().size() * sizeof(T));
@@ -144,6 +168,100 @@ class JamMeOp : public OpKernel {
         jam->flat<T>().data(),
         out->flat<T>().data(),
 	(float*)sim->flat<float>().data());
+
+
+//checkpoint::CreateTableTensorSliceBuilder;
+
+
+#if 0
+    BundleWrite write(Env::Default(), "data-test");
+    OP_REQUIRES_OK_ASYNC(ctx, writer.Add(filename_dat, in), done);
+    OP_REQUIRES_OK_ASYNC(ctx, writer.Finish(), done);
+#endif
+
+
+
+#if 0
+    auto qjam_data = jam->flat<T>().data();
+    int32 qjam_size = jam->flat<T>().size();
+    const Eigen::half *qjam_c = reinterpret_cast<const Eigen::half *>(jam->flat<T>().data());
+    //const char *qin_c = "abcdefgh";
+    std::cout << "========" << qjam_c[0] << "|" << std::endl;
+#endif
+
+#if 1
+#ifdef JAM_ENABLE_DUMP_DATA
+
+    OP_REQUIRES_ASYNC(ctx, !ctx->input_alloc_attr(0).on_host(),
+		    errors::Internal("The input tensor to the _CopyFromGpuToHost kernel "
+			    "must reside on the device."), done);
+
+    //auto device = static_cast<Device*>(ctx->device());
+    //auto device = static_cast<const Device*>(&(ctx->eigen_device<GPUDevice>()));
+    auto device = static_cast<tensorflow::Device*>(ctx->device());
+    //auto device = ctx->device();
+
+
+#if 1
+    AllocatorAttributes alloc_attrs_dat;
+    alloc_attrs_dat.set_gpu_compatible(true);
+    alloc_attrs_dat.set_on_host(true);
+    std::ofstream fs_dat(filename_dat, std::ofstream::binary);
+    const char *my_dat;
+    size_t my_dat_size;
+    Tensor t_dat_cpu;
+    OP_REQUIRES_OK_ASYNC(ctx, ctx->allocate_temp(DataTypeToEnum<T>::v(), in.shape(), &t_dat_cpu, alloc_attrs_dat), done);
+    ctx->op_device_context()->CopyDeviceTensorToCPU(&in, "CopyFromGpuToHost1", device, &t_dat_cpu,
+		    [ctx, done](const Status& s) {
+		    ctx->SetStatus(s);
+//		    done();
+		    });
+    my_dat = t_dat_cpu.tensor_data().data();
+    my_dat_size = in.NumElements() * sizeof(T);
+    fs_dat.write(my_dat, my_dat_size);
+    fs_dat.close();
+#endif
+
+#if 1
+    AllocatorAttributes alloc_attrs_jam;
+    alloc_attrs_jam.set_gpu_compatible(true);
+    alloc_attrs_jam.set_on_host(true);
+    std::ofstream fs_jam(filename_jam, std::ofstream::binary);
+    const char *my_jam;
+    size_t my_jam_size;
+    Tensor t_jam_cpu;
+    OP_REQUIRES_OK_ASYNC(ctx, ctx->allocate_temp(DataTypeToEnum<T>::v(), in.shape(), &t_jam_cpu, alloc_attrs_jam), done);
+    ctx->op_device_context()->CopyDeviceTensorToCPU(jam, "CopyFromGpuToHost2", device, &t_jam_cpu,
+		    [ctx, done](const Status& s) {
+		    ctx->SetStatus(s);
+//		    done();
+		    });
+    my_jam = t_jam_cpu.tensor_data().data();
+    my_jam_size = in.NumElements() * sizeof(T);
+    fs_jam.write(my_jam, my_jam_size);
+    fs_jam.close();
+#endif
+
+#if 0
+    auto dat_p = in.flat<string>();
+    auto jam_p = jam->flat<string>();
+    string dat_str = dat_p(0);
+    string jam_str = jam_p(0);
+
+    string dat_p = "abcdefgh";
+    const char *dat_str = reinterpret_cast<const char *>(& dat_p);
+    //const char *dat_str = reinterpret_cast<const char *>(& (in.flat<T>().data()));
+    std::cout << "========" << in.flat<T>().size() << "|" << dat_str[0] << "|" << dat_str[1] << std::endl;
+    //fs_dat.write(dat_str, in.flat<T>().size());
+    fs_dat.write(dat_str, 5);
+    //    fs_jam.write(reinterpret_cast<char *>(& jam_str), jam_p(0).size());
+    fs_dat.close();
+    fs_jam.close();
+#endif
+#endif
+#endif
+
+    done();
   }
 
   private:
