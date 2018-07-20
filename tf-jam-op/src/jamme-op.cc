@@ -188,23 +188,25 @@ class JamMeOp : public AsyncOpKernel {
 		  fs_dat.write(my_dat, my_dat_size);
 		  fs_dat.close();
 
-		  AllocatorAttributes alloc_attrs_jam;
-		  alloc_attrs_jam.set_gpu_compatible(true);
-		  alloc_attrs_jam.set_on_host(true);
-		  std::ofstream fs_jam(filename_jam, std::ofstream::binary);
-		  const char *my_jam;
-		  size_t my_jam_size;
-		  Tensor t_jam_cpu;
-		  OP_REQUIRES_OK_ASYNC(ctx, ctx->allocate_temp(DataTypeToEnum<T>::v(), in.shape(), &t_jam_cpu, alloc_attrs_jam), done);
-		  ctx->op_device_context()->CopyDeviceTensorToCPU(jam, "CopyFromGpuToHost2", device, &t_jam_cpu,
-				  [ctx, done](const Status& s) {
-				  ctx->SetStatus(s);
-				  //done();
-				  });
-		  my_jam = t_jam_cpu.tensor_data().data();
-		  my_jam_size = in.NumElements() * sizeof(T);
-		  fs_jam.write(my_jam, my_jam_size);
-		  fs_jam.close();
+		  if (typeid(T) != typeid(float)) {
+			  AllocatorAttributes alloc_attrs_jam;
+			  alloc_attrs_jam.set_gpu_compatible(true);
+			  alloc_attrs_jam.set_on_host(true);
+			  std::ofstream fs_jam(filename_jam, std::ofstream::binary);
+			  const char *my_jam;
+			  size_t my_jam_size;
+			  Tensor t_jam_cpu;
+			  OP_REQUIRES_OK_ASYNC(ctx, ctx->allocate_temp(DataTypeToEnum<T>::v(), in.shape(), &t_jam_cpu, alloc_attrs_jam), done);
+			  ctx->op_device_context()->CopyDeviceTensorToCPU(jam, "CopyFromGpuToHost2", device, &t_jam_cpu,
+					  [ctx, done](const Status& s) {
+					  ctx->SetStatus(s);
+					  //done();
+					  });
+			  my_jam = t_jam_cpu.tensor_data().data();
+			  my_jam_size = in.NumElements() * sizeof(T);
+			  fs_jam.write(my_jam, my_jam_size);
+			  fs_jam.close();
+		  }
 	  }
 #endif
 
