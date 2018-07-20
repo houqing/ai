@@ -15,11 +15,6 @@ struct JamMeFunctor {
   void operator()(const OpKernelContext* ctx, const int size, const T* in, T* jam, T* out, float *sim);
 };
 
-template <typename Device, typename T>
-struct JamMeGradFunctor {
-  void operator()(const OpKernelContext* ctx, const int size, const T* in, T* jam);
-};
-
 }	// namespace functor
 }	// namespace tensorflow
 
