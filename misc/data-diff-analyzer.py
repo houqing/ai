@@ -39,12 +39,9 @@ f_out_pic = f_b + '--diff.png'
 _f_type = sys.argv[3]
 f_type = _f_type.split('-')
 
-is_diff_eps_for_fp16 = True # XXX change default to False
-
 f_a_is_possibly_pad=True
 if f_type[0] in [ 'f16', 'fp16', '16', 'h' ]:
     a = np.fromfile(f_a, np.float16)
-    is_diff_eps_for_fp16 = True
     a_t = 'rfloat16'
 elif f_type[0] in [ 'f32', 'fp32', '32', 's' ]:
     a = np.fromfile(f_a, np.float32)
@@ -59,7 +56,6 @@ else:
 f_b_is_possibly_pad=True
 if f_type[1] in [ 'f16', 'fp16', '16', 'h' ]:
     b = np.fromfile(f_b, np.float16)
-    is_diff_eps_for_fp16 = True
     b_t = 'rfloat16'
 elif f_type[1] in [ 'f32', 'fp32', '32', 's' ]:
     b = np.fromfile(f_b, np.float32)
@@ -263,7 +259,7 @@ if not is_skip_fig:
 
     ax3 = plt.subplot(413, sharex=ax1)
     ax3.xaxis.set_visible(False)
-    plt.plot(diff_rel, label='diff [|a-b|/(|a|+|b|+EPS)]  ('+diff_rel_info+')', linewidth=0, marker='.', markersize=fig_markersize, markeredgewidth=0, markerfacecolor='black')
+    plt.plot(diff_rel, label='diff [|a-b|/(|a|+|b|)]  ('+diff_rel_info+')', linewidth=0, marker='.', markersize=fig_markersize, markeredgewidth=0, markerfacecolor='black')
     plt.plot(diff_rel_avg, linewidth=fig_avg_linewidth, color='red')
     plt.legend(loc='upper left')
 
