@@ -187,7 +187,7 @@ else:
     bb = b
 
 # select from sorted
-if True:
+if False:
     _sel_begin = 65127
     _sel_end = 65128
     _sel_begin = 5200
@@ -275,17 +275,12 @@ _AB_u64_sign_is_same = np.where(_B_u64_abs < _ref_u64_min, True, _AB_u64_sign_is
 _A_u64_abs = np.where(_B_u64_abs < _ref_u64_min, _A_u64_abs + _ref_u64_min, _A_u64_abs)
 _B_u64_abs = np.where(_B_u64_abs < _ref_u64_min, _ref_u64_min, _B_u64_abs)
 
-print('A:', _A_u64_abs[:10])
-print('B:', _B_u64_abs[:10])
-print('AB_sign:', _AB_u64_sign_is_same[:10])
 _sum_abs = _A_u64_abs + _B_u64_abs
 _sub_AB_abs = _A_u64_abs - _B_u64_abs
 _sub_BA_abs = _B_u64_abs - _A_u64_abs
-print('sum:', _sum_abs[:10])
 _sub_abs = _sum_abs
 _sub_abs = np.where(np.logical_and(_AB_u64_sign_is_same, _A_u64_abs >= _B_u64_abs), _sub_AB_abs, _sub_abs)
 _sub_abs = np.where(np.logical_and(_AB_u64_sign_is_same, _A_u64_abs < _B_u64_abs), _sub_BA_abs, _sub_abs)
-print('sub:', _sub_abs[:10])
 _arg_zeros = np.argwhere(np.equal(_sum_abs, 0))
 np.put(_sum_abs, _arg_zeros, 1)
 diff_rel_ideal = _sub_abs / _sum_abs
@@ -300,31 +295,6 @@ diff_rel_ideal_mod = np.array(diff_rel_ideal)
 np.put(diff_rel_ideal_norm, _arg_mod, 0)
 np.put(diff_rel_ideal_mod, _arg_mod, _diff_avg_mod)
 np.put(diff_rel_ideal_mod, _arg_norm, 0)
-
-if False:
-    _A_s64 = aa.view(np.int64)
-    _A_u64 = aa.view(np.uint64)
-    _A_f64 = _A_s64.astype(np.float64)
-    _B_s64 = bb.view(np.int64)
-    _B_u64 = bb.view(np.uint64)
-    _B_f64 = _B_s64.astype(np.float64)
-    _sub_abs = abs(_A_f64 - _B_f64)
-    _sum_abs = abs(_A_f64) + abs(_B_f64)
-    _sum_u64_abs = abs(_A_u64 & 0x7fffffffffffffff) + abs(_B_u64 & 0x7fffffffffffffff)
-    _arg_zeros = np.argwhere(np.equal(_sum_u64_abs, 0))
-    np.put(_sum_abs, _arg_zeros, 1)
-    diff_rel_ideal = _sub_abs / _sum_abs
-    np.put(diff_rel_ideal, _arg_zeros, 0)
-    diff_rel_ideal_avg_s = gen_avg_all(diff_rel_ideal)
-
-    _diff_avg_mod = diff_rel_ideal_avg_s * 100
-    _arg_norm = np.argwhere(np.less_equal(diff_rel_ideal, _diff_avg_mod))
-    _arg_mod = np.argwhere(np.greater(diff_rel_ideal, _diff_avg_mod))
-    diff_rel_ideal_norm = np.array(diff_rel_ideal)
-    diff_rel_ideal_mod = np.array(diff_rel_ideal)
-    np.put(diff_rel_ideal_norm, _arg_mod, 0)
-    np.put(diff_rel_ideal_mod, _arg_mod, _diff_avg_mod)
-    np.put(diff_rel_ideal_mod, _arg_norm, 0)
 
 # generate output info tail
 data_a_info = 'avg_pos='+str(aa_pos_avg_s)+' avg_neg='+str(aa_neg_avg_s)
