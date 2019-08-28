@@ -14,7 +14,7 @@ VER=8
 def usage_exit(err_info='', err_no=-1):
     if err_info:
         print('Error: ', err_info)
-    print('Usage:', sys.argv[0], '<file_a> <file_b> <f16|f32|npy>-<f16|f32|npy>')
+    print('Usage:', sys.argv[0], '<file_a> <file_b> <fp16|fp32|npy>-<fp16|fp32|npy>')
     exit(err_no)
 
 # check param
@@ -24,25 +24,35 @@ is_need_cast_input_to_fp16 = False
 is_skip_log = False
 is_skip_fig = False
 is_marker_factor_auto = False
-is_sort = True
+is_sort = False
+conf_trim_off = None
+conf_trim_len = None
 if len(sys.argv) >= 5:
     for arg in sys.argv[4:]:
-        if arg in [ 'f16', 'fp16', '16', 'h' ]:
-            is_need_cast_input_to_fp16 = True
-        elif arg in [ 'nofig' ]:
+        if arg in [ 'sort' ]:
+            is_sort = True
+        elif arg in [ 'nofig', 'nopic' ]:
             is_skip_fig = True
         elif arg in [ 'nolog' ]:
             is_skip_log = True
+        elif arg in [ 'nofile' ]:
+            is_skip_fig = True
+            is_skip_log = True
+        # XXX debug only options, bugs are features here
         elif arg in [ 'auto' ]:
             is_marker_factor_auto = True
-        elif arg in [ 'nosort' ]:
-            is_sort = False
+        elif arg in [ 'f16', 'fp16', '16', 'h' ]:
+            is_need_cast_input_to_fp16 = True
+        elif arg.startswith('offset=') or arg.startswith('off='):
+            conf_trim_off = int(arg.lstrip('offset='))
+        elif arg.startswith('length=') or arg.startswith('len='):
+            conf_trim_len = int(arg.lstrip('length='))
     
 # get input
 f_a = sys.argv[1]
 f_b = sys.argv[2]
-f_out_log = f_b + '--diff.log'
-f_out_pic = f_b + '--diff.png'
+f_out_log = f_b + '--sort-diff.log' if is_sort else f_b + '--diff.log'
+f_out_fig = f_b + '--sort-diff.png' if is_sort else f_b + '--diff.png'
 _f_type = sys.argv[3]
 f_type = _f_type.split('-')
 
@@ -146,9 +156,9 @@ f_b_info = 'B_'+b_t+'--v'+str(VER)+': '+f_b
 output_info_head = []
 output_info_head.append(f_a_info)
 output_info_head.append(f_b_info)
-if False:
+if True:
     output_info_head.append('log   : ' + f_out_log)
-    output_info_head.append('pic   : ' + f_out_pic)
+    output_info_head.append('fig   : ' + f_out_fig)
 output_info_head.append('info_a: ' + st_a_info)
 output_info_head.append('info_b: ' + st_b_info)
 
@@ -186,22 +196,23 @@ else:
     aa = a
     bb = b
 
-# select from sorted
-if False:
-    _sel_begin = 65127
-    _sel_end = 65128
-    _sel_begin = 5200
-    _sel_end = 5400
-    _sel_begin = 3800
-    _sel_end = 6600
-    _sel_begin = 4500
-    _sel_end = 5400
-    aa = aa[_sel_begin:_sel_end]
-    bb = bb[_sel_begin:_sel_end]
-    #aa = np.array([0x3FEFFF00], np.uint64).view(np.float64)
-    #bb = np.array([0x3FFF0], np.uint64).view(np.float64)
-    print("aa:", aa[:10])
-    print("bb:", bb[:10])
+# select from list
+_sel_begin = 0
+_sel_end = st_real_data_total
+if conf_trim_off and conf_trim_off > 0:
+    if conf_trim_off < st_real_data_total:
+        _sel_begin = conf_trim_off
+if conf_trim_len and conf_trim_len > 0:
+    _sel_end = _sel_begin + conf_trim_len
+    if _sel_end > st_real_data_total:
+        _sel_end = st_real_data_total
+    st_real_data_total = _sel_end - _sel_begin
+aa = aa[_sel_begin:_sel_end]
+bb = bb[_sel_begin:_sel_end]
+#aa = np.array([0x3FEFFF00], np.uint64).view(np.float64)
+#bb = np.array([0x3FFF0], np.uint64).view(np.float64)
+#print("aa:", aa[:10])
+#print("bb:", bb[:10])
 
 # function to generate data averages
 def gen_avg_all(data):
@@ -227,6 +238,8 @@ bb_pos_avg_s, bb_neg_avg_s = gen_avg_pos_neg(bb)
 # calc abs diff, avgs
 diff_abs = bb - aa
 diff_abs_pos_avg_s, diff_abs_neg_avg_s = gen_avg_pos_neg(diff_abs)
+_arg_non_zeros = np.argwhere(np.not_equal(diff_abs, 0.0))
+diff_abs_diff_num = len(_arg_non_zeros)
 
 # calc rel diff, avg
 _sum_abs = abs(aa) + abs(bb)
@@ -237,7 +250,7 @@ diff_rel = _sub_abs / _sum_abs
 np.put(diff_rel, _arg_zeros, 0)
 diff_rel_avg_s = gen_avg_all(diff_rel)
 
-_diff_avg_mod = diff_rel_avg_s * 100
+_diff_avg_mod = diff_rel_avg_s * 2**63
 _arg_norm = np.argwhere(np.less_equal(diff_rel, _diff_avg_mod))
 _arg_mod = np.argwhere(np.greater(diff_rel, _diff_avg_mod))
 diff_rel_norm = np.array(diff_rel)
@@ -287,7 +300,7 @@ diff_rel_ideal = _sub_abs / _sum_abs
 np.put(diff_rel_ideal, _arg_zeros, 0)
 diff_rel_ideal_avg_s = gen_avg_all(diff_rel_ideal)
 
-_diff_avg_mod = diff_rel_ideal_avg_s * 100
+_diff_avg_mod = diff_rel_ideal_avg_s * 2**63
 _arg_norm = np.argwhere(np.less_equal(diff_rel_ideal, _diff_avg_mod))
 _arg_mod = np.argwhere(np.greater(diff_rel_ideal, _diff_avg_mod))
 diff_rel_ideal_norm = np.array(diff_rel_ideal)
@@ -299,7 +312,7 @@ np.put(diff_rel_ideal_mod, _arg_norm, 0)
 # generate output info tail
 data_a_info = 'avg_pos='+str(aa_pos_avg_s)+' avg_neg='+str(aa_neg_avg_s)
 data_b_info = 'avg_pos='+str(bb_pos_avg_s)+' avg_neg='+str(bb_neg_avg_s)
-diff_info = 'avg_pos='+str(diff_abs_pos_avg_s)+' avg_neg='+str(diff_abs_neg_avg_s)
+diff_info = 'avg_pos='+str(diff_abs_pos_avg_s)+' avg_neg='+str(diff_abs_neg_avg_s)+' diff_num='+str(diff_abs_diff_num)
 diff_rel_info = 'avg_rel='+str(diff_rel_avg_s)
 diff_rel_ideal_info = 'avg_idl='+str(diff_rel_ideal_avg_s)
 
@@ -372,5 +385,5 @@ if not is_skip_fig:
     plt.legend(loc='upper left', fontsize=fig_legend_fontsize)
 
     plt.subplots_adjust(hspace=0.1)
-    plt.savefig(f_out_pic, bbox_inches='tight')
+    plt.savefig(f_out_fig, bbox_inches='tight')
 
