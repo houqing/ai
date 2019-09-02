@@ -264,11 +264,11 @@ ab_max_s = max(aa_max_s, bb_max_s)
 ab_min_s = min(aa_min_s, bb_min_s)
 
 # calc abs diff, avgs
-diff_abs = bb - aa
-diff_abs_pos_avg_s, diff_abs_neg_avg_s = gen_avg_pos_neg(diff_abs)
-diff_abs_max_s, diff_abs_min_s = gen_max_min_all(diff_abs)
-_arg_non_zeros = np.argwhere(np.not_equal(diff_abs, 0.0))
-diff_abs_diff_num = len(_arg_non_zeros)
+diff_inc = bb - aa
+diff_inc_pos_avg_s, diff_inc_neg_avg_s = gen_avg_pos_neg(diff_inc)
+diff_inc_max_s, diff_inc_min_s = gen_max_min_all(diff_inc)
+_arg_non_zeros = np.argwhere(np.not_equal(diff_inc, 0.0))
+diff_inc_diff_num = len(_arg_non_zeros)
 
 # calc rel diff, avg
 _sum_abs = abs(aa) + abs(bb)
@@ -280,31 +280,25 @@ np.put(diff_rel, _arg_zeros, 0)
 diff_rel_avg_s = gen_avg_all(diff_rel)
 diff_rel_max_s, diff_rel_min_s = gen_max_min_all(diff_rel)
 
-_diff_avg_mod = diff_rel_avg_s * 2**63
-_arg_norm = np.argwhere(np.less_equal(diff_rel, _diff_avg_mod))
-_arg_mod = np.argwhere(np.greater(diff_rel, _diff_avg_mod))
-diff_rel_norm = np.array(diff_rel)
-diff_rel_mod = np.array(diff_rel)
-np.put(diff_rel_norm, _arg_mod, 0)
-np.put(diff_rel_mod, _arg_mod, _diff_avg_mod)
-np.put(diff_rel_mod, _arg_norm, 0)
-
 # calc ideal diff, avg
 def gen_ideal_diff(dtype=np.float32):
+    _is_enable_norm = False
     if dtype in [ np.float32 ]:
         _AB_dtype_f = np.float32
         _AB_dtype_u = np.uint32
         _AB_u_abs_mask = 0x7fffffff
         _AB_u_sign_mask = 0x80000000
         _AB_u_sign_shift = 31
-        _diff_ideal_mark_s = np.log2(np.array(0x1, np.uint16).view(np.float16).astype(np.float32).view(np.uint32)) / (_AB_u_sign_shift + 1)
+        _diff_ideal_mark_s = np.log2(np.array(0x1, np.uint16).view(np.float16).astype(np.float32).view(np.uint32))
+        _diff_ideal_man_mark_s = np.log2(np.array(0x7fffff, np.uint32))
     elif dtype in [ np.float16 ]:
         _AB_dtype_f = np.float16
         _AB_dtype_u = np.uint16
         _AB_u_abs_mask = 0x7fff
         _AB_u_sign_mask = 0x80000000
         _AB_u_sign_shift = 15
-        _diff_ideal_mark_s = np.log2(np.array(0x1, np.uint16).view(np.float16).astype(np.float16).view(np.uint16)) / (_AB_u_sign_shift + 1)
+        _diff_ideal_mark_s = np.log2(np.array(0x3ff, np.uint16).view(np.float16).astype(np.float16).view(np.uint16))
+        _diff_ideal_man_mark_s = np.log2(np.array(0x3ff, np.uint16))
 
     A_f = aa.astype(_AB_dtype_f)
     A_u = A_f.view(_AB_dtype_u)
@@ -325,27 +319,33 @@ def gen_ideal_diff(dtype=np.float32):
     _AB_u64_sub_fix = np.where(_AB_u_sign_is_same, np.maximum(A_u64_abs, B_u64_abs) - np.minimum(A_u64_abs, B_u64_abs) + 1, 1)
     AB_diff_bits = np.where(_AB_u_sign_is_same, np.log2(_AB_u64_sub_fix), AB_diff_bits)
 
-    _diff_ideal = AB_diff_bits / (_AB_u_sign_shift + 1)
+    if _is_enable_norm:
+        _diff_ideal_mark_s = _diff_ideal_mark_s / (_AB_u_sign_shift + 1)
+        _diff_ideal = AB_diff_bits / (_AB_u_sign_shift + 1)
+    else:
+        _diff_ideal_mark_s = _diff_ideal_mark_s
+        _diff_ideal = AB_diff_bits
     _diff_ideal_avg_s = gen_avg_all(_diff_ideal)
 
-    return _diff_ideal, _diff_ideal_avg_s, _diff_ideal_mark_s
+    return _diff_ideal, _diff_ideal_avg_s, _diff_ideal_man_mark_s, _diff_ideal_mark_s
 
-_AB_u_sign_shift = 31
-diff_ideal_f32, diff_ideal_f32_avg_s, diff_ideal_f32_mark_for_f16_s = gen_ideal_diff(np.float32)
-diff_ideal_f16, diff_ideal_f16_avg_s, diff_ideal_f16_mark_for_f16_s = gen_ideal_diff(np.float16)
+diff_ideal_f32, diff_ideal_f32_avg_s, diff_ideal_f32_man_mark_s, diff_ideal_f32_mark_for_f16_s = gen_ideal_diff(np.float32)
+diff_ideal_f32_max_s, diff_ideal_f32_min_s = gen_max_min_all(diff_ideal_f32)
+diff_ideal_f16, diff_ideal_f16_avg_s, diff_ideal_f16_man_mark_s, diff_ideal_f16_mark_for_f16_s = gen_ideal_diff(np.float16)
+diff_ideal_f16_max_s, diff_ideal_f16_min_s = gen_max_min_all(diff_ideal_f16)
 
 # generate output info tail
 data_a_info = 'avg_pos='+str(aa_pos_avg_s)+' avg_neg='+str(aa_neg_avg_s)+' max='+str(aa_max_s)+' min='+str(aa_min_s)
 data_b_info = 'avg_pos='+str(bb_pos_avg_s)+' avg_neg='+str(bb_neg_avg_s)+' max='+str(bb_max_s)+' min='+str(bb_min_s)
-diff_info = 'diff_num='+str(diff_abs_diff_num)+' avg_pos='+str(diff_abs_pos_avg_s)+' avg_neg='+str(diff_abs_neg_avg_s)+' max='+str(diff_abs_max_s)+' min='+str(diff_abs_min_s)
-diff_rel_info = 'avg_rel='+str(diff_rel_avg_s)
-diff_ideal_f32_info = 'avg_idl_f32='+str(diff_ideal_f32_avg_s)
-diff_ideal_f16_info = 'avg_idl_f16='+str(diff_ideal_f16_avg_s)
+diff_info = 'diff_num='+str(diff_inc_diff_num)+' avg_pos='+str(diff_inc_pos_avg_s)+' avg_neg='+str(diff_inc_neg_avg_s)+' max='+str(diff_inc_max_s)+' min='+str(diff_inc_min_s)
+diff_rel_info = 'avg='+str(diff_rel_avg_s)+' max='+str(diff_rel_max_s)
+diff_ideal_f32_info = 'avg='+str(diff_ideal_f32_avg_s)+' max='+str(diff_ideal_f32_max_s)+' min='+str(diff_ideal_f32_min_s)
+diff_ideal_f16_info = 'avg='+str(diff_ideal_f16_avg_s)+' max='+str(diff_ideal_f16_max_s)+' min='+str(diff_ideal_f16_min_s)
 
 output_info_tail = []
 output_info_tail.append('data_a: ' + data_a_info)
 output_info_tail.append('data_b: ' + data_b_info)
-output_info_tail.append('diff_abs: ' + diff_info)
+output_info_tail.append('diff_inc: ' + diff_info)
 output_info_tail.append('diff_rel: ' + diff_rel_info)
 output_info_tail.append('diff_idl_f32: ' + diff_ideal_f32_info)
 output_info_tail.append('diff_idl_f16: ' + diff_ideal_f16_info)
@@ -393,41 +393,48 @@ if not is_skip_fig:
     ax1.axhline(bb_max_s, xmax=0.02, color='red', linewidth=fig_avg_linewidth, marker=None)
     ax1.axhline(bb_min_s, xmax=0.02, color='green', linewidth=fig_avg_linewidth, marker=None)
     plt.title(fig_title, loc='left')
-    plt.plot(aa, label='data a : '+st_a_info+' '+data_a_info, linewidth=0, marker='.', markersize=fig_markersize_a, markeredgewidth=0, markerfacecolor='red', alpha=fig_alpha)
-    plt.plot(bb, label='data b : '+st_b_info+' '+data_b_info, linewidth=0, marker='.', markersize=fig_markersize_b, markeredgewidth=0, markerfacecolor='blue', alpha=fig_alpha)
+    plt.plot(aa, label='data_a: '+st_a_info+' '+data_a_info, linewidth=0, marker='.', markersize=fig_markersize_a, markeredgewidth=0, markerfacecolor='red', alpha=fig_alpha)
+    plt.plot(bb, label='data_b: '+st_b_info+' '+data_b_info, linewidth=0, marker='.', markersize=fig_markersize_b, markeredgewidth=0, markerfacecolor='blue', alpha=fig_alpha)
     plt.legend(loc='upper left', fontsize=fig_legend_fontsize)
 
     ax2 = plt.subplot(512)
     ax2.xaxis.set_visible(False)
-    ax2.axhline(diff_abs_pos_avg_s, xmax=0.01, color='red', linewidth=fig_avg_linewidth, marker=None)
-    ax2.axhline(diff_abs_neg_avg_s, xmax=0.01, color='green', linewidth=fig_avg_linewidth, marker=None)
+    ax2.axhline(diff_inc_pos_avg_s, xmax=0.01, color='red', linewidth=fig_avg_linewidth, marker=None)
+    ax2.axhline(diff_inc_neg_avg_s, xmax=0.01, color='green', linewidth=fig_avg_linewidth, marker=None)
     if False:
-        ax2.axhline(diff_abs_max_s, xmax=0.02, color='red', linewidth=fig_avg_linewidth, marker=None)
-        ax2.axhline(diff_abs_min_s, xmax=0.02, color='green', linewidth=fig_avg_linewidth, marker=None)
-    plt.plot(diff_abs, label='diff (=b-a) : '+diff_info, linewidth=0, marker='.', markersize=fig_markersize, markeredgewidth=0, markerfacecolor='blue', alpha=fig_alpha)
+        ax2.axhline(diff_inc_max_s, xmax=0.02, color='red', linewidth=fig_avg_linewidth, marker=None)
+        ax2.axhline(diff_inc_min_s, xmax=0.02, color='green', linewidth=fig_avg_linewidth, marker=None)
+    plt.plot(diff_inc, label='diff_inc (=b-a): '+diff_info, linewidth=0, marker='.', markersize=fig_markersize, markeredgewidth=0, markerfacecolor='blue', alpha=fig_alpha)
     plt.legend(loc='upper left', fontsize=fig_legend_fontsize)
 
     ax3 = plt.subplot(513)
     ax3.xaxis.set_visible(False)
     ax3.axhline(diff_rel_avg_s, xmax=0.01, color='blue', linewidth=fig_avg_linewidth, marker=None)
-    plt.plot(diff_rel_mod, linewidth=0, marker='.', markersize=fig_markersize_mod, markeredgewidth=0, markerfacecolor='red', alpha=fig_alpha)
-    plt.plot(diff_rel_norm, label='diff (=|a-b| / (|a| + |b|)) : '+diff_rel_info, linewidth=0, marker='.', markersize=fig_markersize, markeredgewidth=0, markerfacecolor='blue', alpha=fig_alpha)
+    ax3.axhline(diff_rel_max_s, xmax=0.02, color='red', linewidth=fig_avg_linewidth, marker=None)
+    ax3.axhline(diff_rel_min_s, xmax=0.02, color='green', linewidth=fig_avg_linewidth, marker=None)
+    plt.plot(diff_rel, label='diff_rel (=|a-b|/(|a|+|b|)): '+diff_rel_info, linewidth=0, marker='.', markersize=fig_markersize, markeredgewidth=0, markerfacecolor='blue', alpha=fig_alpha)
     plt.legend(loc='upper left', fontsize=fig_legend_fontsize)
 
     ax4 = plt.subplot(514)
     ax4.xaxis.set_visible(False)
-    ax4.axhline(1, xmax=0.01, color='red', linewidth=fig_avg_linewidth, marker=None)
-    ax4.axhline(diff_ideal_f32_mark_for_f16_s, xmax=1, color='green', linewidth=fig_thresh_linewidth, marker=None)
+    ax4.axhline(32, xmax=0.01, color='gray', linewidth=fig_avg_linewidth, marker=None)
+    ax4.axhline(diff_ideal_f32_max_s, xmax=0.02, color='red', linewidth=fig_avg_linewidth, marker=None)
+    ax4.axhline(diff_ideal_f32_min_s, xmax=0.02, color='green', linewidth=fig_avg_linewidth, marker=None)
+    ax4.axhline(diff_ideal_f32_mark_for_f16_s, xmax=1, color='red', linewidth=fig_thresh_linewidth, marker=None)
+    ax4.axhline(diff_ideal_f32_man_mark_s, xmax=1, color='green', linewidth=fig_thresh_linewidth, marker=None)
     ax4.axhline(diff_ideal_f32_avg_s, xmax=0.01, color='blue', linewidth=fig_avg_linewidth, marker=None)
-    plt.plot(diff_ideal_f32, label='diff ideal f32 : '+diff_ideal_f32_info, linewidth=0, marker='.', markersize=fig_markersize, markeredgewidth=0, markerfacecolor='blue', alpha=fig_alpha)
+    plt.plot(diff_ideal_f32, label='diff_idl_f32: '+diff_ideal_f32_info, linewidth=0, marker='.', markersize=fig_markersize, markeredgewidth=0, markerfacecolor='blue', alpha=fig_alpha)
     plt.legend(loc='upper left', fontsize=fig_legend_fontsize)
 
     ax4 = plt.subplot(515)
     ax4.xaxis.set_visible(False)
-    ax4.axhline(1, xmax=0.01, color='red', linewidth=fig_avg_linewidth, marker=None)
-    ax4.axhline(diff_ideal_f16_mark_for_f16_s, xmax=1, color='green', linewidth=fig_thresh_linewidth, marker=None)
+    ax4.axhline(16, xmax=0.01, color='gray', linewidth=fig_avg_linewidth, marker=None)
+    ax4.axhline(diff_ideal_f16_max_s, xmax=0.02, color='red', linewidth=fig_avg_linewidth, marker=None)
+    ax4.axhline(diff_ideal_f16_min_s, xmax=0.02, color='green', linewidth=fig_avg_linewidth, marker=None)
+    ax4.axhline(diff_ideal_f16_mark_for_f16_s, xmax=1, color='red', linewidth=fig_thresh_linewidth, marker=None)
+    ax4.axhline(diff_ideal_f16_man_mark_s, xmax=1, color='green', linewidth=fig_thresh_linewidth, marker=None)
     ax4.axhline(diff_ideal_f16_avg_s, xmax=0.01, color='blue', linewidth=fig_avg_linewidth, marker=None)
-    plt.plot(diff_ideal_f16, label='diff ideal f16 : '+diff_ideal_f16_info, linewidth=0, marker='.', markersize=fig_markersize, markeredgewidth=0, markerfacecolor='blue', alpha=fig_alpha)
+    plt.plot(diff_ideal_f16, label='diff_idl_f16: '+diff_ideal_f16_info, linewidth=0, marker='.', markersize=fig_markersize, markeredgewidth=0, markerfacecolor='blue', alpha=fig_alpha)
     plt.legend(loc='upper left', fontsize=fig_legend_fontsize)
 
     plt.subplots_adjust(hspace=0.1)
