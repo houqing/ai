@@ -9,7 +9,7 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 
-VER=9
+VER=10
 
 def usage_exit(err_info='', err_no=-1):
     if err_info:
@@ -65,6 +65,9 @@ np.random.seed(0x1234)
 # get input
 f_a = sys.argv[1]
 f_b = sys.argv[2]
+is_zero_out_b = False
+if f_a == f_b:
+    is_zero_out_b = True
 f_out_log = f_b + '--sort-diff.log' if is_sort else f_b + '--diff.log'
 f_out_fig = f_b + '--sort-diff.' + conf_fig_format if is_sort else f_b + '--diff.' + conf_fig_format
 _f_type = sys.argv[3]
@@ -129,6 +132,9 @@ if is_ideal_need_align_dtype:
         conf_ideal_type = np.float16
         is_need_cast_input_to_fp16 = True
 
+if is_zero_out_b:
+    b.fill(0)
+
 if is_need_cast_input_to_fp16:
     a = a.astype(np.float16)
     b = b.astype(np.float16)
@@ -162,10 +168,16 @@ st_a_total = len(a)
 _st_a_inf = len(np.argwhere(np.isinf(a)))
 _st_a_nan = len(np.argwhere(np.isnan(a)))
 _st_a_zero = len(np.argwhere(np.equal(a, 0)))
-st_b_total = len(b)
-_st_b_inf = len(np.argwhere(np.isinf(b)))
-_st_b_nan = len(np.argwhere(np.isnan(b)))
-_st_b_zero = len(np.argwhere(np.equal(b, 0)))
+if is_zero_out_b:
+    st_b_total = st_a_total
+    _st_b_inf = 0
+    _st_b_nan = 0
+    _st_b_zero = st_b_total
+else:
+    st_b_total = len(b)
+    _st_b_inf = len(np.argwhere(np.isinf(b)))
+    _st_b_nan = len(np.argwhere(np.isnan(b)))
+    _st_b_zero = len(np.argwhere(np.equal(b, 0)))
 _st_a_trim_info = '<'+str(st_a_total_orig)+'>' if is_trimmed else ''
 _st_b_trim_info = '<'+str(st_b_total_orig)+'>' if is_trimmed else ''
 st_a_info = 'total='+str(st_a_total)+_st_a_trim_info+' inf='+str(_st_a_inf)+' nan='+str(_st_a_nan)+' zero='+str(_st_a_zero)
@@ -179,8 +191,10 @@ output_info_head = []
 output_info_head.append(f_a_info)
 output_info_head.append(f_b_info)
 if True:
-    output_info_head.append('log   : ' + f_out_log)
-    output_info_head.append('fig   : ' + f_out_fig)
+    if not is_skip_log:
+        output_info_head.append('log   : ' + f_out_log)
+    if not is_skip_fig:
+        output_info_head.append('fig   : ' + f_out_fig)
 output_info_head.append('info_a: ' + st_a_info)
 output_info_head.append('info_b: ' + st_b_info)
 
@@ -213,7 +227,11 @@ if st_a_total != st_b_total:
 if is_sort:
     _arg_sort = np.argsort(a)
     aa = np.take(a, _arg_sort)
-    bb = np.take(b, _arg_sort)
+    bb = None
+    if is_zero_out_b:
+        bb = b[:len(aa)]
+    else:
+        bb = np.take(b, _arg_sort)
 else:
     aa = a
     bb = b
@@ -261,21 +279,29 @@ def gen_avg_pos_neg(data):
 # calc data, avgs
 aa_pos_avg_s, aa_neg_avg_s = gen_avg_pos_neg(aa)
 aa_max_s, aa_min_s = gen_max_min_all(aa)
-bb_pos_avg_s, bb_neg_avg_s = gen_avg_pos_neg(bb)
-bb_max_s, bb_min_s = gen_max_min_all(bb)
+if is_zero_out_b:
+    bb_pos_avg_s, bb_neg_avg_s = 0, 0
+    bb_max_s, bb_min_s = 0, 0
+else:
+    bb_pos_avg_s, bb_neg_avg_s = gen_avg_pos_neg(bb)
+    bb_max_s, bb_min_s = gen_max_min_all(bb)
 ab_max_s = max(aa_max_s, bb_max_s)
 ab_min_s = min(aa_min_s, bb_min_s)
 
 # calc abs diff, avgs
-diff_inc = bb - aa
+diff_inc = aa - bb
 diff_inc_pos_avg_s, diff_inc_neg_avg_s = gen_avg_pos_neg(diff_inc)
 diff_inc_max_s, diff_inc_min_s = gen_max_min_all(diff_inc)
 _arg_non_zeros = np.argwhere(np.not_equal(diff_inc, 0.0))
 diff_inc_diff_num = len(_arg_non_zeros)
 
 # calc rel diff, avg
-_sum_abs = abs(aa) + abs(bb)
-_sub_abs = abs(aa - bb)
+if is_zero_out_b:
+    _sum_abs = abs(aa)
+    _sub_abs = _sum_abs
+else:
+    _sum_abs = abs(aa) + abs(bb)
+    _sub_abs = abs(aa - bb)
 _arg_zeros = np.argwhere(np.equal(_sum_abs, 0))
 np.put(_sum_abs, _arg_zeros, 1)
 diff_rel = _sub_abs / _sum_abs
@@ -411,7 +437,7 @@ if not is_skip_fig:
     if False:
         ax2.axhline(diff_inc_max_s, xmax=0.02, color='red', linewidth=fig_avg_linewidth, marker=None)
         ax2.axhline(diff_inc_min_s, xmax=0.02, color='green', linewidth=fig_avg_linewidth, marker=None)
-    plt.plot(diff_inc, label='diff_inc (=b-a): '+diff_info, linewidth=0, marker='.', markersize=fig_markersize, markeredgewidth=0, markerfacecolor='blue', alpha=fig_alpha)
+    plt.plot(diff_inc, label='diff_inc (=a-b): '+diff_info, linewidth=0, marker='.', markersize=fig_markersize, markeredgewidth=0, markerfacecolor='blue', alpha=fig_alpha)
     plt.legend(loc='upper left', fontsize=fig_legend_fontsize)
 
     ax3 = plt.subplot(513)
