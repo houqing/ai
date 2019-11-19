@@ -9,7 +9,7 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 
-VER=10
+VER=11
 
 def usage_exit(err_info='', err_no=-1):
     if err_info:
@@ -91,6 +91,8 @@ elif f_type[0] in [ 'npy', 'np', 'n' ]:
         a_dtype = np.float32
     elif a.dtype == np.float16:
         a_dtype = np.float16
+    elif a.dtype == np.float64:
+        a_dtype = np.float64
     else:
         usage_exit('not support npy dtype for a: '+str(a.dtype))
 else:
@@ -114,6 +116,8 @@ elif f_type[1] in [ 'npy', 'np', 'n' ]:
         b_dtype = np.float32
     elif b.dtype == np.float16:
         b_dtype = np.float16
+    elif b.dtype == np.float64:
+        b_dtype = np.float64
     else:
         usage_exit('not support npy dtype for b: '+str(b.dtype))
 else:
@@ -126,10 +130,8 @@ if a_dtype == np.float16 or b_dtype == np.float16:
 if a_dtype == np.float32 or b_dtype == np.float32:
     ab_max_dtype = np.float32
 
-conf_ideal_type = np.float32
 if is_ideal_need_align_dtype:
     if ab_max_dtype == np.float16 or is_need_cast_input_to_fp16:
-        conf_ideal_type = np.float16
         is_need_cast_input_to_fp16 = True
 
 if is_zero_out_b:
@@ -264,6 +266,10 @@ def gen_max_min_all(data):
     data_min_s = np.nanmin(data) if len(data) else 0
     return data_max_s, data_min_s
 
+def gen_abs_min_all(data):
+    data_abs_min_s = np.nanmin(abs(data)) if len(data) else 0
+    return data_abs_min_s
+
 def gen_avg_pos_neg(data):
     _arg_data_pos = np.argwhere(np.greater(data, 0))
     _data_pos = np.take(data, _arg_data_pos)
@@ -276,22 +282,32 @@ def gen_avg_pos_neg(data):
     return data_pos_avg_s, data_neg_avg_s
 
 
+# remove inf/nan before calc
+_arg_aa_inf_nan = np.argwhere(np.logical_or(np.isinf(aa), np.isnan(aa)))
+_arg_bb_inf_nan = np.argwhere(np.logical_or(np.isinf(bb), np.isnan(bb)))
+np.put(aa, _arg_aa_inf_nan, 0)
+np.put(bb, _arg_bb_inf_nan, 0)
+
 # calc data, avgs
 aa_pos_avg_s, aa_neg_avg_s = gen_avg_pos_neg(aa)
 aa_max_s, aa_min_s = gen_max_min_all(aa)
+aa_abs_min_s = gen_abs_min_all(aa)
 if is_zero_out_b:
     bb_pos_avg_s, bb_neg_avg_s = 0, 0
     bb_max_s, bb_min_s = 0, 0
+    bb_abs_min_s = 0
 else:
     bb_pos_avg_s, bb_neg_avg_s = gen_avg_pos_neg(bb)
     bb_max_s, bb_min_s = gen_max_min_all(bb)
+    bb_abs_min_s = gen_abs_min_all(bb)
 ab_max_s = max(aa_max_s, bb_max_s)
 ab_min_s = min(aa_min_s, bb_min_s)
 
-# calc abs diff, avgs
+# calc incremental diff, avgs
 diff_inc = aa - bb
 diff_inc_pos_avg_s, diff_inc_neg_avg_s = gen_avg_pos_neg(diff_inc)
 diff_inc_max_s, diff_inc_min_s = gen_max_min_all(diff_inc)
+diff_inc_abs_min_s = gen_abs_min_all(diff_inc)
 _arg_non_zeros = np.argwhere(np.not_equal(diff_inc, 0.0))
 diff_inc_diff_num = len(_arg_non_zeros)
 
@@ -368,10 +384,10 @@ diff_ideal_f16, diff_ideal_f16_avg_s, diff_ideal_f16_man_mark_s, diff_ideal_f16_
 diff_ideal_f16_max_s, diff_ideal_f16_min_s = gen_max_min_all(diff_ideal_f16)
 
 # generate output info tail
-data_a_info = 'avg_pos='+str(aa_pos_avg_s)+' avg_neg='+str(aa_neg_avg_s)+' max='+str(aa_max_s)+' min='+str(aa_min_s)
-data_b_info = 'avg_pos='+str(bb_pos_avg_s)+' avg_neg='+str(bb_neg_avg_s)+' max='+str(bb_max_s)+' min='+str(bb_min_s)
-diff_info = 'diff_num='+str(diff_inc_diff_num)+' avg_pos='+str(diff_inc_pos_avg_s)+' avg_neg='+str(diff_inc_neg_avg_s)+' max='+str(diff_inc_max_s)+' min='+str(diff_inc_min_s)
-diff_rel_info = 'avg='+str(diff_rel_avg_s)+' max='+str(diff_rel_max_s)
+data_a_info = 'avg_pos='+str(aa_pos_avg_s)+' avg_neg='+str(aa_neg_avg_s)+' max='+str(aa_max_s)+' min='+str(aa_min_s)+' abs_min='+str(aa_abs_min_s)
+data_b_info = 'avg_pos='+str(bb_pos_avg_s)+' avg_neg='+str(bb_neg_avg_s)+' max='+str(bb_max_s)+' min='+str(bb_min_s)+' abs_min='+str(bb_abs_min_s)
+diff_info = 'diff_num='+str(diff_inc_diff_num)+' avg_pos='+str(diff_inc_pos_avg_s)+' avg_neg='+str(diff_inc_neg_avg_s)+' max='+str(diff_inc_max_s)+' min='+str(diff_inc_min_s)+' abs_min='+str(diff_inc_abs_min_s)
+diff_rel_info = 'avg='+str(diff_rel_avg_s)+' max='+str(diff_rel_max_s)+' min='+str(diff_rel_min_s)
 diff_ideal_f32_info = 'avg='+str(diff_ideal_f32_avg_s)+' max='+str(diff_ideal_f32_max_s)+' min='+str(diff_ideal_f32_min_s)
 diff_ideal_f16_info = 'avg='+str(diff_ideal_f16_avg_s)+' max='+str(diff_ideal_f16_max_s)+' min='+str(diff_ideal_f16_min_s)
 
