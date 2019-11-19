@@ -34,7 +34,7 @@ def tfdbg_sendline_expect_safe(client, cmd, exp=None, timeout=-1, is_ignore_time
         if is_ignore_timeout:
             return 1
         else:
-            client.expect_exact('__never_hit__', 0.001)
+            client.expect_exact(my_tfdbg_prompt, 0.001)
 
     return 0
 
@@ -83,7 +83,6 @@ def run_and_dump(iter_num, dump_dir="dump-data"):
                 _id = tfdbg_sendline_expect_safe(c, cmd, timeout=3600, is_ignore_timeout=True)
                 if _id != 0:
                     print('!', end='', flush=True)
-                tfdbg_sendline_expect_safe(c, '')
             else:
                 print('-', end='', flush=True)
             _cnt += 1
@@ -99,4 +98,6 @@ for _iter_offset in _iter_list:
     _iter_todo = _iter_offset - _iter_executed
     run_and_dump(_iter_todo, 'dump-data-' + str(_iter_offset))
     _iter_executed += _iter_todo
+
+c.interact()
 
