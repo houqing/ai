@@ -9,7 +9,7 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 
-VER=11
+VER=12
 
 def usage_exit(err_info='', err_no=-1):
     if err_info:
@@ -289,14 +289,17 @@ np.put(aa, _arg_aa_inf_nan, 0)
 np.put(bb, _arg_bb_inf_nan, 0)
 
 # calc data, avgs
+aa_avg_s = gen_avg_all(aa)
 aa_pos_avg_s, aa_neg_avg_s = gen_avg_pos_neg(aa)
 aa_max_s, aa_min_s = gen_max_min_all(aa)
 aa_abs_min_s = gen_abs_min_all(aa)
 if is_zero_out_b:
+    bb_avg_s = 0
     bb_pos_avg_s, bb_neg_avg_s = 0, 0
     bb_max_s, bb_min_s = 0, 0
     bb_abs_min_s = 0
 else:
+    bb_avg_s = gen_avg_all(bb)
     bb_pos_avg_s, bb_neg_avg_s = gen_avg_pos_neg(bb)
     bb_max_s, bb_min_s = gen_max_min_all(bb)
     bb_abs_min_s = gen_abs_min_all(bb)
@@ -384,9 +387,9 @@ diff_ideal_f16, diff_ideal_f16_avg_s, diff_ideal_f16_man_mark_s, diff_ideal_f16_
 diff_ideal_f16_max_s, diff_ideal_f16_min_s = gen_max_min_all(diff_ideal_f16)
 
 # generate output info tail
-data_a_info = 'avg_pos='+str(aa_pos_avg_s)+' avg_neg='+str(aa_neg_avg_s)+' max='+str(aa_max_s)+' min='+str(aa_min_s)+' abs_min='+str(aa_abs_min_s)
-data_b_info = 'avg_pos='+str(bb_pos_avg_s)+' avg_neg='+str(bb_neg_avg_s)+' max='+str(bb_max_s)+' min='+str(bb_min_s)+' abs_min='+str(bb_abs_min_s)
-diff_info = 'diff_num='+str(diff_inc_diff_num)+' avg_pos='+str(diff_inc_pos_avg_s)+' avg_neg='+str(diff_inc_neg_avg_s)+' max='+str(diff_inc_max_s)+' min='+str(diff_inc_min_s)+' abs_min='+str(diff_inc_abs_min_s)
+data_a_info = 'avg='+str(aa_avg_s)+' avg_p='+str(aa_pos_avg_s)+' avg_n='+str(aa_neg_avg_s)+' max='+str(aa_max_s)+' min='+str(aa_min_s)+' abs_min='+str(aa_abs_min_s)
+data_b_info = 'avg='+str(bb_avg_s)+' avg_p='+str(bb_pos_avg_s)+' avg_n='+str(bb_neg_avg_s)+' max='+str(bb_max_s)+' min='+str(bb_min_s)+' abs_min='+str(bb_abs_min_s)
+diff_info = 'diff_num='+str(diff_inc_diff_num)+' avg_p='+str(diff_inc_pos_avg_s)+' avg_n='+str(diff_inc_neg_avg_s)+' max='+str(diff_inc_max_s)+' min='+str(diff_inc_min_s)+' abs_min='+str(diff_inc_abs_min_s)
 diff_rel_info = 'avg='+str(diff_rel_avg_s)+' max='+str(diff_rel_max_s)+' min='+str(diff_rel_min_s)
 diff_ideal_f32_info = 'avg='+str(diff_ideal_f32_avg_s)+' max='+str(diff_ideal_f32_max_s)+' min='+str(diff_ideal_f32_min_s)
 diff_ideal_f16_info = 'avg='+str(diff_ideal_f16_avg_s)+' max='+str(diff_ideal_f16_max_s)+' min='+str(diff_ideal_f16_min_s)
