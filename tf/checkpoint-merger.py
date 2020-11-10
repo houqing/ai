@@ -47,6 +47,7 @@ with tf.Session() as sess:
 
 log_info = []
 log_sum_info = []
+log_sum_info.append("")
 log_sum_info.append("====summary==== (" + ckpt_out + ": total_imported=" + str(len(all_var_name_list_import)) + ")")
 for ckpt, step, vinfo_list, vname_list in all_var_info_todo_list:
     info = "(" + ckpt + ": global_step=" + str(step) + " num_imported=" + str(len(vinfo_list)) + " num_total=" + str(len(vname_list)) + " num_dropped=" + str(len(vname_list) - len(vinfo_list)) + ")"
