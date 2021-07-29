@@ -570,10 +570,10 @@ def get_layer_list_by_node_name_strip(name_strip):
     else:
         _t_a_list_raw = _t
         _t_b = ''
-    if '_g' in _t_a_list_raw:
-        _t_real_max = my_mode_layer_max + 1
-    else:
-        _t_real_max = my_mode_layer_max
+    _t_real_max = my_mode_layer_max
+    if my_mode_layer_max > 0:
+        if '_g' in _t_a_list_raw:
+            _t_real_max = my_mode_layer_max + 1
 
     if my_mode_layer_max >= 0:
         _t_a_list  = _t_a_list_raw[:_t_real_max]
@@ -814,7 +814,7 @@ my_g.append('digraph h00405431_' + my_ver + ' {')
 my_g.append('label="h00405431_' + my_ver + '";')    # TODO
 my_g.append('node [color=dimgray,penwidth=0.1,shape=plain,style="rounded,filled",fillcolor=whitesmoke,fontcolor=navy,fontsize=10,fontname="Arial Narrow",height=0,width=0,margin=0.0];')
 my_g.append('edge [color=lightblue,penwidth=0.5,arrowhead=vee,arrowsize=0.3,minlen=1,labelfontcolor=gray,labelfontname="Arial Narrow",labelfontsize=6,decorate=false,fontcolor=gray,fontname="Arial Narrow",fontsize=6];')
-my_g.append('graph [' + my_mode_dot_graph_attr + ',color=gray,penwidth=0.1,pencolor=gray,fontcolor=gray,fontsize=6,fontname="Arial Narrow",labeljust=l,margin=0.0,nodesep=0.05,ranksep=0.2,splines=true,newrank=true,mclimit=3];')
+my_g.append('graph [' + my_mode_dot_graph_attr + ',color=gray,penwidth=0.1,pencolor=gray,fontcolor=gray,fontsize=6,fontname="Arial Narrow",labeljust=l,margin=0.0,nodesep=0.05,ranksep=0.2,splines=true,newrank=true,mclimit=1];')
 my_g.append('')
 for o in my_g_nodes:
     my_g.append(o)
