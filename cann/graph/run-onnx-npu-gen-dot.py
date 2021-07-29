@@ -71,6 +71,7 @@ for _s in my_mode[len(_t_str)+my_mode_dot_graph_draw_node_basename_level:]:
     else:
         break
 
+
 my_info = my_mode
 
 MY_DEBUG_PRINT('# begin for:', my_info)
@@ -565,8 +566,7 @@ def get_layer_list_by_node_name_strip(name_strip):
     _t = _t.rstrip('/').split('/')
     if my_mode_dot_graph_draw_node_basename_level > 0:
         _t_a_list_raw = _t[:-my_mode_dot_graph_draw_node_basename_level]
-        _t_b = _t[-my_mode_dot_graph_draw_node_basename_level:]
-        _t_b = _t_b[0] if len(_t_b) > 0 else ''
+        _t_b = '/'.join(_t[-my_mode_dot_graph_draw_node_basename_level:])
     else:
         _t_a_list_raw = _t
         _t_b = ''
@@ -578,12 +578,38 @@ def get_layer_list_by_node_name_strip(name_strip):
     if my_mode_layer_max >= 0:
         _t_a_list  = _t_a_list_raw[:_t_real_max]
     if len(_t_a_list_raw) > _t_real_max:
-        _t_b = '..' + _t_b
+        if my_mode_dot_graph_draw_node_basename_level > 0:
+            _t_b = '..' + _t_b
     _t_a_list = [ my_identity + '__' + my_ver ] + _t_a_list
     return _t_a_list, _t_b
 
 def get_g_node_body_label_by_attr(layer_last='', op='', stream_id=None):
-    _t = ''.join([layer_last, ' <' + op + '>'])
+    if my_mode_dot_graph_draw_node_basename_level == 0:
+        _t = op
+    else:
+        _t_op = '<' + op + '>'
+        if my_mode_dot_graph_draw_node_basename_level == 1:
+            _t_sp = ' '
+        else:
+            _t_sp = '\n'
+        if layer_last:
+            _t = _t_sp.join([layer_last, _t_op])
+        else:
+            _t = _t_op
+
+    return _t
+
+
+    if my_mode_dot_graph_draw_node_basename_level > 0:
+        _t_op = '<' + op + '>'
+        _t_sp = '\n'
+        if layer_last:
+            _t = '\n'.join([layer_last, _t_op])
+        else:
+            _t = _t_op
+    else:
+        #_t = ''.join([layer_last, _t_op])
+        _t = op
     # TODO display stream_id alternatively
     '''
     if stream_id:
