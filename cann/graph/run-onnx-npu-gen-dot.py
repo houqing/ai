@@ -9,6 +9,7 @@ my_identity = 'houqing'
 
 
 MY_EMPTY_STR = '#'
+MY_GRAPH_TOOLTIP_LEN_LIMIT = 16300    # max=16384
 
 def usage_exit(*args, **kwargs):
     print(*args, **kwargs)
@@ -584,10 +585,11 @@ def get_layer_list_by_node_name_strip(name_strip):
     return _t_a_list, _t_b
 
 def get_g_node_body_label_by_attr(layer_last='', op='', stream_id=None):
+    _t_op = '<' + op + '>'
     if my_mode_dot_graph_draw_node_basename_level == 0:
-        _t = op
+        #_t = op
+        _t = _t_op
     else:
-        _t_op = '<' + op + '>'
         if my_mode_dot_graph_draw_node_basename_level == 1:
             _t_sp = ' '
         else:
@@ -597,25 +599,11 @@ def get_g_node_body_label_by_attr(layer_last='', op='', stream_id=None):
         else:
             _t = _t_op
 
-    return _t
-
-
-    if my_mode_dot_graph_draw_node_basename_level > 0:
-        _t_op = '<' + op + '>'
-        _t_sp = '\n'
-        if layer_last:
-            _t = '\n'.join([layer_last, _t_op])
-        else:
-            _t = _t_op
-    else:
-        #_t = ''.join([layer_last, _t_op])
-        _t = op
     # TODO display stream_id alternatively
     '''
     if stream_id:
         _t = _t + ' ' + stream_id
     '''
-
     return _t
 
 def get_g_node_body_tooltip_by_attr(uid, node):
@@ -629,7 +617,7 @@ def get_g_node_body_tooltip_by_attr(uid, node):
         for _o in _t_list:
             _t = _t + '\n' + k + '>' + _o[1] + ' ' + node_name_strip(_o[0])
 
-    _t = _t + '\n.'
+    _t = _t[:MY_GRAPH_TOOLTIP_LEN_LIMIT] + '\n.'
     return _t
 
 def get_g_node_body_color_by_attr(node, is_faked=False):
@@ -813,8 +801,8 @@ my_g = []
 my_g.append('digraph h00405431_' + my_ver + ' {')
 my_g.append('label="h00405431_' + my_ver + '";')    # TODO
 my_g.append('node [color=dimgray,penwidth=0.1,shape=plain,style="rounded,filled",fillcolor=whitesmoke,fontcolor=navy,fontsize=10,fontname="Arial Narrow",height=0,width=0,margin=0.0];')
-my_g.append('edge [color=lightblue,penwidth=0.5,arrowhead=vee,arrowsize=0.3,minlen=1,labelfontcolor=gray,labelfontname="Arial Narrow",labelfontsize=6,decorate=false,fontcolor=gray,fontname="Arial Narrow",fontsize=6];')
-my_g.append('graph [' + my_mode_dot_graph_attr + ',color=gray,penwidth=0.1,pencolor=gray,fontcolor=gray,fontsize=6,fontname="Arial Narrow",labeljust=l,margin=0.0,nodesep=0.05,ranksep=0.2,splines=true,newrank=true,mclimit=1];')
+my_g.append('edge [color=lightblue,penwidth=0.5,arrowhead=vee,arrowsize=0.3,minlen=1,labelfontcolor=gray,labelfontname="Arial Narrow",labelfontsize=6,decorate=true,fontcolor=gray,fontname="Arial Narrow",fontsize=6];')
+my_g.append('graph [' + my_mode_dot_graph_attr + ',color=gray,penwidth=0.1,pencolor=gray,fontcolor=gray,fontsize=6,fontname="Arial Narrow",labeljust=l,margin=0.0,nodesep=0.05,ranksep=0.2,splines=true,newrank=true,mclimit=3];')
 my_g.append('')
 for o in my_g_nodes:
     my_g.append(o)
