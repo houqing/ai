@@ -248,16 +248,27 @@ with open(my_fn_in, 'rb') as f:
 MY_DEBUG_PRINT('parse graph node lines:', my_in_format)
 # TODO connect between send and recv
 if my_in_format == 'onnx':
+    # specific fix for tf1 node scope name
+    re_node_name_tf1_fix_01_bp_prefix = re.compile(r'^tower_[^/]*/gradients/tower_[^/]*/')    # '_r/_g/'
+    re_node_name_tf1_fix_02_bp_middle = re.compile(r'/tower_[^/]*/gradients/tower_[^/]*/')    # '/_r/_g/'
+    re_node_name_tf1_fix_03_bp_middle = re.compile(r'tower_[^/]*/gradients/tower_[^/]*/')    # '/_r/_g/'
+    re_node_name_tf1_fix_04_bp_prefix = re.compile(r'^tower_[^/]*/gradients/')    # '_r/_g/'
+    re_node_name_tf1_fix_05_bp_middle = re.compile(r'/tower_[^/]*/gradients/')    # '/_r/_g/'
+    re_node_name_tf1_fix_06_bp_middle = re.compile(r'tower_[^/]*/gradients/')    # '/_r/_g/'
+    #re_node_name_tf1_fix_07_bp_middle = re.compile(r'/gradients/')    # '/_g/'
+    re_node_name_tf1_fix_11_fp_prefix = re.compile(r'^tower_[^/]*/')    # '_r/'
+    re_node_name_tf1_fix_12_fp_middle = re.compile(r'/tower_[^/]*/')    # '/_r/'
+    re_node_name_tf1_fix_13_fp_middle = re.compile(r'tower_[^/]*/')    # '/_r/'
     # specific fix for tf2 node scope name
-    re_node_name_tf2_fix_01_fp_prefix = re.compile(r'^While_body_while_body_[^/]*/while/')    # 'r_/'
-    re_node_name_tf2_fix_02_fp_middle = re.compile(r'/While_body_while_body_[^/]*/while/')    # '/r_/'
-    re_node_name_tf2_fix_03_fp_middle = re.compile(r'While_body_while_body_[^/]*/while/')    # '/r_/'
-    re_node_name_tf2_fix_11_bp_prefix = re.compile(r'^While_body_while_body_[^/]*/gradient_tape/while/')    # 'r_/grad_/'
-    re_node_name_tf2_fix_12_bp_middle = re.compile(r'/While_body_while_body_[^/]*/gradient_tape/while/')    # '/r_/grad_/'
-    re_node_name_tf2_fix_13_bp_middle = re.compile(r'While_body_while_body_[^/]*/gradient_tape/while/')    # '/r_/grad_/'
-    re_node_name_tf2_fix_21_fb_prefix = re.compile(r'^While_body_while_body_[^/]*/')    # 'r_/'
-    re_node_name_tf2_fix_22_fb_middle = re.compile(r'/While_body_while_body_[^/]*/')    # '/r_/'
-    re_node_name_tf2_fix_23_fb_middle = re.compile(r'While_body_while_body_[^/]*/')    # '/r_/'
+    re_node_name_tf2_fix_01_fp_prefix = re.compile(r'^While_body_while_body_[^/]*/while/')    # '_r/'
+    re_node_name_tf2_fix_02_fp_middle = re.compile(r'/While_body_while_body_[^/]*/while/')    # '/_r/'
+    re_node_name_tf2_fix_03_fp_middle = re.compile(r'While_body_while_body_[^/]*/while/')    # '/_r/'
+    re_node_name_tf2_fix_11_bp_prefix = re.compile(r'^While_body_while_body_[^/]*/gradient_tape/while/')    # '_r/_g/'
+    re_node_name_tf2_fix_12_bp_middle = re.compile(r'/While_body_while_body_[^/]*/gradient_tape/while/')    # '/_r/_g/'
+    re_node_name_tf2_fix_13_bp_middle = re.compile(r'While_body_while_body_[^/]*/gradient_tape/while/')    # '/_r/_g/'
+    re_node_name_tf2_fix_21_fb_prefix = re.compile(r'^While_body_while_body_[^/]*/')    # '_r/'
+    re_node_name_tf2_fix_22_fb_middle = re.compile(r'/While_body_while_body_[^/]*/')    # '/_r/'
+    re_node_name_tf2_fix_23_fb_middle = re.compile(r'While_body_while_body_[^/]*/')    # '/_r/'
 
     # general node attr
     re_node_in_name_off_list = re.compile(r'    input: "([^ "]*)"')
@@ -271,6 +282,8 @@ if my_in_format == 'onnx':
     # other general node attr # TODO
     re_node_is_compiled_fusion_op = re.compile(r'      name: "_is_compiled_fusion_op" * i: ([0-9-]*)')
     re_node_is_n_batch_split = re.compile(r'      name: "_is_n_batch_split" * i: ([0-9-]*)')
+    # _no_task: op is removed by fusion rule
+    re_node_is_n_batch_split = re.compile(r'      name: "_no_task" * i: ([0-9-]*)')
     re_node_fusion_scope = re.compile(r'      name: "fusion_scope" * i: ([0-9-]*)')
     re_node_input_i_list = re.compile(r'      name: "input_i" * ([^}]*)}')
     re_node_output_i_list = re.compile(r'      name: "output_i" * ([^}]*)}')
@@ -336,6 +349,17 @@ else:
 
 def node_name_strip(name):
     _name_strip = name
+    _name_strip = re_node_name_tf1_fix_01_bp_prefix.sub('_r/_g/', _name_strip)
+    _name_strip = re_node_name_tf1_fix_02_bp_middle.sub('/_r/_g/', _name_strip)
+    _name_strip = re_node_name_tf1_fix_03_bp_middle.sub('/_r/_g/', _name_strip)
+    _name_strip = re_node_name_tf1_fix_04_bp_prefix.sub('_r/_g/', _name_strip)
+    _name_strip = re_node_name_tf1_fix_05_bp_middle.sub('/_r/_g/', _name_strip)
+    _name_strip = re_node_name_tf1_fix_06_bp_middle.sub('/_r/_g/', _name_strip)
+    #_name_strip = re_node_name_tf1_fix_07_bp_middle.sub('/_g/', _name_strip)
+    _name_strip = re_node_name_tf1_fix_11_fp_prefix.sub('_r/', _name_strip)
+    _name_strip = re_node_name_tf1_fix_12_fp_middle.sub('/_r/', _name_strip)
+    _name_strip = re_node_name_tf1_fix_13_fp_middle.sub('/_r/', _name_strip)
+
     _name_strip = re_node_name_tf2_fix_01_fp_prefix.sub('_r/', _name_strip)
     _name_strip = re_node_name_tf2_fix_02_fp_middle.sub('/_r/', _name_strip)
     _name_strip = re_node_name_tf2_fix_03_fp_middle.sub('/_r/', _name_strip)
@@ -802,7 +826,7 @@ my_g.append('digraph h00405431_' + my_ver + ' {')
 my_g.append('label="h00405431_' + my_ver + '";')    # TODO
 my_g.append('node [color=dimgray,penwidth=0.1,shape=plain,style="rounded,filled",fillcolor=whitesmoke,fontcolor=navy,fontsize=10,fontname="Arial Narrow",height=0,width=0,margin=0.0];')
 my_g.append('edge [color=lightblue,penwidth=0.5,arrowhead=vee,arrowsize=0.3,minlen=1,labelfontcolor=gray,labelfontname="Arial Narrow",labelfontsize=6,decorate=true,fontcolor=gray,fontname="Arial Narrow",fontsize=6];')
-my_g.append('graph [' + my_mode_dot_graph_attr + ',color=gray,penwidth=0.1,pencolor=gray,fontcolor=gray,fontsize=6,fontname="Arial Narrow",labeljust=l,margin=0.0,nodesep=0.05,ranksep=0.2,splines=true,newrank=true,mclimit=3];')
+my_g.append('graph [' + my_mode_dot_graph_attr + ',color=gray,penwidth=0.1,pencolor=gray,fontcolor=gray,fontsize=6,fontname="Arial Narrow",labeljust=l,margin=0.0,nodesep=0.05,ranksep=0.2,splines=true,newrank=true,mclimit=1.0];')
 my_g.append('')
 for o in my_g_nodes:
     my_g.append(o)
