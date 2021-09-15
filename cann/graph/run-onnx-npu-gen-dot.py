@@ -3,7 +3,7 @@
 import re
 import sys
 
-my_ver = 'v6'
+my_ver = 'v7'
 
 my_identity = 'houqing'
 
@@ -78,7 +78,7 @@ my_info = my_mode
 MY_DEBUG_PRINT('# begin for:', my_info)
 
 MY_NODE_PATTERN_TYPES = ['name', 'op', 'id', 'stream_id', 'tvm_blockdim']
-MY_NODE_PATTERN_MODES = ['+', '-', '!']
+MY_NODE_PATTERN_MODES = ['+', '-', '!', '=']
 MY_NODE_PATTERN_MODE_FILE = ['=']
 MY_NODE_PATTERN_COMMENT = ['#']
 
@@ -220,20 +220,37 @@ def is_node_blocked(node):
             is_blocked = True
     return is_blocked
 
+def is_node_highlight(node):
+    is_highlight = False
+    for t in MY_NODE_PATTERN_TYPES:
+        if is_node_or_str_in_list(node, t, '='):
+            is_highlight = True
+    return is_highlight
+
 
 MY_DEBUG_PRINT('read graph file and build node lines:', my_fn_in)
 with open(my_fn_in, 'rb') as f:
     _t = f.read().decode()
     if 'ir_version: ' in _t:
         my_in_format = 'onnx'
+    elif 'versions {' in _t and 'producer: ' in _t and 'min_consumer: ' in _t:
+        my_in_format = 'tf'
     else:
         my_in_format = 'proto'
+    MY_DEBUG_PRINT('detected graph format:', my_in_format)
     my_fn_out_dot = my_fn_in + '--' + my_info + '.dot'
     if my_in_format == 'onnx':
         _t = _t.split('\n')
         _t = ''.join([x for x in _t if x.startswith('  ') and not x.startswith('  name: ')])
         _t = re.sub(r'[\r\n]', r'', _t).strip()
         _t = re.sub(r'  node {', r'\nnode {', _t)
+        my_in_lines = _t.split('\n')
+    elif my_in_format == 'tf':
+        _t = re.sub(r'[\r\n]', r'', _t).strip()
+        _t = re.sub(r'node {', r'\nnode {', _t)
+        _t = re.sub(r'library {', r'\nlibrary {', _t)
+        _t = re.sub(r'versions {', r'\nversions {', _t)
+        my_in_lines = re.findall(r'node {.*', _t)
     else:
         assert(False)
         _t = _t.split('\n')
@@ -241,35 +258,13 @@ with open(my_fn_in, 'rb') as f:
         _t = re.sub(r'[^ ]  attr {.*', r'', _t)
         _t = re.sub(r'[\r\n]', r'', _t).strip()
         _t = re.sub(r'  op {', r'\nop {', _t)
+        my_in_lines = _t.split('\n')
 
-    my_in_lines = _t.split('\n')
 
-
-MY_DEBUG_PRINT('parse graph node lines:', my_in_format)
+MY_DEBUG_PRINT('parse graph node lines:', len(my_in_lines))
 # TODO connect between send and recv
+MY_UNSUPPORTED_PATTERN = 'MY_UNSUPPORTED_PATTERN'
 if my_in_format == 'onnx':
-    # specific fix for tf1 node scope name
-    re_node_name_tf1_fix_01_bp_prefix = re.compile(r'^tower_[^/]*/gradients/tower_[^/]*/')    # '_r/_g/'
-    re_node_name_tf1_fix_02_bp_middle = re.compile(r'/tower_[^/]*/gradients/tower_[^/]*/')    # '/_r/_g/'
-    re_node_name_tf1_fix_03_bp_middle = re.compile(r'tower_[^/]*/gradients/tower_[^/]*/')    # '/_r/_g/'
-    re_node_name_tf1_fix_04_bp_prefix = re.compile(r'^tower_[^/]*/gradients/')    # '_r/_g/'
-    re_node_name_tf1_fix_05_bp_middle = re.compile(r'/tower_[^/]*/gradients/')    # '/_r/_g/'
-    re_node_name_tf1_fix_06_bp_middle = re.compile(r'tower_[^/]*/gradients/')    # '/_r/_g/'
-    #re_node_name_tf1_fix_07_bp_middle = re.compile(r'/gradients/')    # '/_g/'
-    re_node_name_tf1_fix_11_fp_prefix = re.compile(r'^tower_[^/]*/')    # '_r/'
-    re_node_name_tf1_fix_12_fp_middle = re.compile(r'/tower_[^/]*/')    # '/_r/'
-    re_node_name_tf1_fix_13_fp_middle = re.compile(r'tower_[^/]*/')    # '/_r/'
-    # specific fix for tf2 node scope name
-    re_node_name_tf2_fix_01_fp_prefix = re.compile(r'^While_body_while_body_[^/]*/while/')    # '_r/'
-    re_node_name_tf2_fix_02_fp_middle = re.compile(r'/While_body_while_body_[^/]*/while/')    # '/_r/'
-    re_node_name_tf2_fix_03_fp_middle = re.compile(r'While_body_while_body_[^/]*/while/')    # '/_r/'
-    re_node_name_tf2_fix_11_bp_prefix = re.compile(r'^While_body_while_body_[^/]*/gradient_tape/while/')    # '_r/_g/'
-    re_node_name_tf2_fix_12_bp_middle = re.compile(r'/While_body_while_body_[^/]*/gradient_tape/while/')    # '/_r/_g/'
-    re_node_name_tf2_fix_13_bp_middle = re.compile(r'While_body_while_body_[^/]*/gradient_tape/while/')    # '/_r/_g/'
-    re_node_name_tf2_fix_21_fb_prefix = re.compile(r'^While_body_while_body_[^/]*/')    # '_r/'
-    re_node_name_tf2_fix_22_fb_middle = re.compile(r'/While_body_while_body_[^/]*/')    # '/_r/'
-    re_node_name_tf2_fix_23_fb_middle = re.compile(r'While_body_while_body_[^/]*/')    # '/_r/'
-
     # general node attr
     re_node_in_name_off_list = re.compile(r'    input: "([^ "]*)"')
     re_node_out_name_off_list = re.compile(r'    output: "([^ "]*)"')
@@ -283,7 +278,7 @@ if my_in_format == 'onnx':
     re_node_is_compiled_fusion_op = re.compile(r'      name: "_is_compiled_fusion_op" * i: ([0-9-]*)')
     re_node_is_n_batch_split = re.compile(r'      name: "_is_n_batch_split" * i: ([0-9-]*)')
     # _no_task: op is removed by fusion rule
-    re_node_is_n_batch_split = re.compile(r'      name: "_no_task" * i: ([0-9-]*)')
+    re_node_is_no_task = re.compile(r'      name: "_no_task" * i: ([0-9-]*)')
     re_node_fusion_scope = re.compile(r'      name: "fusion_scope" * i: ([0-9-]*)')
     re_node_input_i_list = re.compile(r'      name: "input_i" * ([^}]*)}')
     re_node_output_i_list = re.compile(r'      name: "output_i" * ([^}]*)}')
@@ -342,11 +337,46 @@ if my_in_format == 'onnx':
 
     re_attr_get_num_list = re.compile(r': ([0-9-]+)')
     re_attr_get_str_list = re.compile(r': "([^ "]*)"')
+elif my_in_format == 'tf':
+    # general node attr
+    re_node_in_name_off_list = re.compile(r'  input: "([^ "]*)"')
+    re_node_out_name_off_list = re.compile(MY_UNSUPPORTED_PATTERN)
+    re_node_name = re.compile(r'  name: "([^ "]*)"')
+    re_node_op = re.compile(r'  op: "([^ "]*)"')
+    re_node_id = re.compile(r'  name: "([^ "]*)"')  # use name as id
+    re_node_stream_id = re.compile(MY_UNSUPPORTED_PATTERN)
+    re_node_tvm_blockdim = re.compile(MY_UNSUPPORTED_PATTERN)
+
+    # input/output
+    re_node_param_off_section = re.compile(MY_UNSUPPORTED_PATTERN)
+    re_node_param_name_section = re.compile(MY_UNSUPPORTED_PATTERN)
 else:
     re_node_in_name_off_list = re.compile(r'    input: "([^ "]*)"')
     assert(False)
 
 
+MY_DEBUG_PRINT('define node name fix pattern')
+# specific fix for tf1 node scope name
+re_node_name_tf1_fix_01_bp_prefix = re.compile(r'^tower_[^/]*/gradients/tower_[^/]*/')    # '_r/_g/'
+re_node_name_tf1_fix_02_bp_middle = re.compile(r'/tower_[^/]*/gradients/tower_[^/]*/')    # '/_r/_g/'
+re_node_name_tf1_fix_03_bp_middle = re.compile(r'tower_[^/]*/gradients/tower_[^/]*/')    # '/_r/_g/'
+re_node_name_tf1_fix_04_bp_prefix = re.compile(r'^tower_[^/]*/gradients/')    # '_r/_g/'
+re_node_name_tf1_fix_05_bp_middle = re.compile(r'/tower_[^/]*/gradients/')    # '/_r/_g/'
+re_node_name_tf1_fix_06_bp_middle = re.compile(r'tower_[^/]*/gradients/')    # '/_r/_g/'
+#re_node_name_tf1_fix_07_bp_middle = re.compile(r'/gradients/')    # '/_g/'
+re_node_name_tf1_fix_11_fp_prefix = re.compile(r'^tower_[^/]*/')    # '_r/'
+re_node_name_tf1_fix_12_fp_middle = re.compile(r'/tower_[^/]*/')    # '/_r/'
+re_node_name_tf1_fix_13_fp_middle = re.compile(r'tower_[^/]*/')    # '/_r/'
+# specific fix for tf2 node scope name
+re_node_name_tf2_fix_01_fp_prefix = re.compile(r'^While_body_while_body_[^/]*/while/')    # '_r/'
+re_node_name_tf2_fix_02_fp_middle = re.compile(r'/While_body_while_body_[^/]*/while/')    # '/_r/'
+re_node_name_tf2_fix_03_fp_middle = re.compile(r'While_body_while_body_[^/]*/while/')    # '/_r/'
+re_node_name_tf2_fix_11_bp_prefix = re.compile(r'^While_body_while_body_[^/]*/gradient_tape/while/')    # '_r/_g/'
+re_node_name_tf2_fix_12_bp_middle = re.compile(r'/While_body_while_body_[^/]*/gradient_tape/while/')    # '/_r/_g/'
+re_node_name_tf2_fix_13_bp_middle = re.compile(r'While_body_while_body_[^/]*/gradient_tape/while/')    # '/_r/_g/'
+re_node_name_tf2_fix_21_fb_prefix = re.compile(r'^While_body_while_body_[^/]*/')    # '_r/'
+re_node_name_tf2_fix_22_fb_middle = re.compile(r'/While_body_while_body_[^/]*/')    # '/_r/'
+re_node_name_tf2_fix_23_fb_middle = re.compile(r'While_body_while_body_[^/]*/')    # '/_r/'
 def node_name_strip(name):
     _name_strip = name
     _name_strip = re_node_name_tf1_fix_01_bp_prefix.sub('_r/_g/', _name_strip)
@@ -602,6 +632,8 @@ def get_layer_list_by_node_name_strip(name_strip):
 
     if my_mode_layer_max >= 0:
         _t_a_list  = _t_a_list_raw[:_t_real_max]
+    else:
+        _t_a_list = _t_a_list_raw
     if len(_t_a_list_raw) > _t_real_max:
         if my_mode_dot_graph_draw_node_basename_level > 0:
             _t_b = '..' + _t_b
@@ -646,19 +678,23 @@ def get_g_node_body_tooltip_by_attr(uid, node):
 
 def get_g_node_body_color_by_attr(node, is_faked=False):
     _t = None
-    if not is_faked:
-        if node['tvm_blockdim'] and node['tvm_blockdim'] != '32':
-            _t = 'dimgray'
-    else:
+    if node['tvm_blockdim'] and node['tvm_blockdim'] != MY_EMPTY_STR and ((int(node['tvm_blockdim']) % 32) != 0):
         _t = 'dimgray'
     return _t
 
-def get_g_node_body_by_attr(uid, label, tooltip, color=None, size=None):
+def get_g_node_body_fill_color_by_attr(node, is_faked=False):
+    _t = None
+    if is_node_highlight(node):
+        _t = 'lightcyan'
+    return _t
+
+def get_g_node_body_by_attr(uid, label, tooltip, color=None, fillcolor=None, size=None):
     _opt_fontcolor = ',fontcolor=' + color if color else ''
+    _opt_fillcolor = ',fillcolor=' + fillcolor if fillcolor else ''
     _opt_fontsize = ',fontsize=' + size if size else ''
     _opt_node_attr = ',xlabel=' + '" "'
     _opt_node_attr = ''
-    _t = ''.join(['"', uid, '" [label="', label, '" tooltip="', tooltip, '"', _opt_fontcolor, _opt_fontsize, _opt_node_attr, ']; '])
+    _t = ''.join(['"', uid, '" [label="', label, '" tooltip="', tooltip, '"', _opt_fontcolor, _opt_fillcolor, _opt_fontsize, _opt_node_attr, ']; '])
     return _t
 
 def get_g_edge_color_by_attr(dtype=''):
@@ -730,7 +766,8 @@ for _node in my_nodes_selected.values():
     _g_node_label = get_g_node_body_label_by_attr(_node_layer_last, _node['op_reformat'], _node['stream_id'])
     _g_node_tooltip = get_g_node_body_tooltip_by_attr(_node_uid, _node)
     _g_node_color = get_g_node_body_color_by_attr(_node)
-    _g_node_body = get_g_node_body_by_attr(_node_uid, _g_node_label, _g_node_tooltip, color=_g_node_color)
+    _g_node_fill_color = get_g_node_body_fill_color_by_attr(_node)
+    _g_node_body = get_g_node_body_by_attr(_node_uid, _g_node_label, _g_node_tooltip, color=_g_node_color, fillcolor=_g_node_fill_color)
     _g_node = ''.join([_g_node_begin, _g_node_body, _g_node_end])
     my_g_nodes.append(_g_node)
 
@@ -752,8 +789,9 @@ for _node in my_nodes_selected.values():
             _prev_node_layer_last = ''
             _g_prev_node_label = get_g_node_body_label_by_attr(_prev_node_layer_last, _prev_node['op_reformat'], _prev_node['stream_id'])
             _g_prev_node_tooltip = get_g_node_body_tooltip_by_attr(_prev_node_fake_uid, _prev_node)
-            _g_prev_node_color = get_g_node_body_color_by_attr(_node, True)
-            _g_prev_node_body = get_g_node_body_by_attr(_prev_node_fake_uid, _g_prev_node_label, _g_prev_node_tooltip, color=_g_prev_node_color, size='7')
+            _g_prev_node_color = get_g_node_body_color_by_attr(_prev_node, True)
+            _g_prev_node_fill_color = get_g_node_body_fill_color_by_attr(_prev_node, True)
+            _g_prev_node_body = get_g_node_body_by_attr(_prev_node_fake_uid, _g_prev_node_label, _g_prev_node_tooltip, color=_g_prev_node_color, size='7', fillcolor=_g_prev_node_fill_color)
             _g_prev_node_faked = ''.join([_g_node_begin, _g_prev_node_body, _g_node_end])
             my_g_nodes.append(_g_prev_node_faked)
 
@@ -794,7 +832,8 @@ for _node in my_nodes_selected.values():
                 _g_next_node_label = get_g_node_body_label_by_attr(_next_node_layer_last, _next_node['op_reformat'], _next_node['stream_id'])
                 _g_next_node_tooltip = get_g_node_body_tooltip_by_attr(_next_node_fake_uid, _next_node)
                 _g_next_node_color = get_g_node_body_color_by_attr(_next_node, True)
-                _g_next_node_body = get_g_node_body_by_attr(_next_node_fake_uid, _g_next_node_label, _g_next_node_tooltip, color=_g_next_node_color, size='7')
+                _g_next_node_fill_color = get_g_node_body_fill_color_by_attr(_next_node, True)
+                _g_next_node_body = get_g_node_body_by_attr(_next_node_fake_uid, _g_next_node_label, _g_next_node_tooltip, color=_g_next_node_color, size='7', fillcolor=_g_next_node_fill_color)
                 _g_next_node_faked = ''.join([_g_node_begin, _g_next_node_body, _g_node_end])
                 my_g_nodes.append(_g_next_node_faked)
 
@@ -822,11 +861,11 @@ MY_DEBUG_PRINT('build graph')
 my_g_edges = sorted(list(set(my_g_edges)))  # uniq the edge
 
 my_g = []
-my_g.append('digraph h00405431_' + my_ver + ' {')
-my_g.append('label="h00405431_' + my_ver + '";')    # TODO
+my_g.append('digraph ' + my_identity + '_' + my_ver + ' {')
+#my_g.append('label="' + my_identity + '_' + my_ver + '";')    # TODO
 my_g.append('node [color=dimgray,penwidth=0.1,shape=plain,style="rounded,filled",fillcolor=whitesmoke,fontcolor=navy,fontsize=10,fontname="Arial Narrow",height=0,width=0,margin=0.0];')
 my_g.append('edge [color=lightblue,penwidth=0.5,arrowhead=vee,arrowsize=0.3,minlen=1,labelfontcolor=gray,labelfontname="Arial Narrow",labelfontsize=6,decorate=true,fontcolor=gray,fontname="Arial Narrow",fontsize=6];')
-my_g.append('graph [' + my_mode_dot_graph_attr + ',color=gray,penwidth=0.1,pencolor=gray,fontcolor=gray,fontsize=6,fontname="Arial Narrow",labeljust=l,margin=0.0,nodesep=0.05,ranksep=0.2,splines=true,newrank=true,mclimit=1.0];')
+my_g.append('graph [' + my_mode_dot_graph_attr + ',color=gray,penwidth=0.1,pencolor=limegreen,fontcolor=gray,fontsize=6,fontname="Arial Narrow",labeljust=l,margin=0.0,nodesep=0.05,ranksep=0.2,splines=true,newrank=true,mclimit=1.0];')
 my_g.append('')
 for o in my_g_nodes:
     my_g.append(o)
@@ -846,4 +885,3 @@ for t in ['svg', 'pdf', 'png']:
     MY_DEBUG_PRINT('dot -T' + t + ' -o ' + my_fn_out_dot + '.' + t + ' ' + my_fn_out_dot)
 
 MY_DEBUG_PRINT('# end')
-
