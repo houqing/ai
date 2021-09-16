@@ -3,7 +3,7 @@
 import re
 import sys
 
-my_ver = 'v7'
+my_ver = 'v8'
 
 my_identity = 'houqing'
 
@@ -11,18 +11,23 @@ my_identity = 'houqing'
 MY_EMPTY_STR = '#'
 MY_GRAPH_TOOLTIP_LEN_LIMIT = 16300    # max=16384
 
+# ~!@#$%^&_+-=;',.
 def usage_exit(*args, **kwargs):
     print(*args, **kwargs)
     print('Usage:')
-    print('  ' + sys.argv[0] + ' <FILE> <?|*|+|-|#> <[+|-|#] [+|-|#]node_name_pattern|k=v ...>')
-    print('  ' + sys.argv[0] + ' <FILE> <?|*|+|-|#> = pattern_file')
-    print('  ' + '  ' + '*:', 'print matched')
-    print('  ' + '  ' + '?:', 'print matched and relation')
+    print('  ' + sys.argv[0] + ' <FILE> [0-9]<,|;|+|-|#> <[+|-|!] [+|-|!]node_name_pattern|k=v ...>')
+    print('  ' + sys.argv[0] + ' <FILE> [0-9]<,|;|+|-|#> = pattern_file')
+    print('  ' + '  ' + '[0-9]*:', '(prefix) layer max; node basename level')
+    print('  ' + '  ' + ',:', 'print matched')
+    print('  ' + '  ' + ';:', 'print matched and relation')
     print('  ' + '  ' + '+:', 'graph top to bottom')
     print('  ' + '  ' + '-:', 'graph bottom to top')
     print('  ' + '  ' + '=:', 'shape info level')
-    print('  ' + '  ' + '[0-9]*:', 'layer max; node basename level')
+    print('  ' + '  ' + '@:', 'node info with id')
     print('  ' + '  ' + '#:', 'debug')
+    print('')
+    print('Example:')
+    print('  ' + sys.argv[0] + ' ge_onnx_ABC.pbtxt 2+@ = my_pattern_file')
     exit()
 
 def MY_DEBUG_PRINT(*args, **kwargs):
@@ -36,6 +41,7 @@ my_fn_in = sys.argv[1]
 my_mode = sys.argv[2]
 
 my_mode_debug = False
+my_mode_node_info_id = False
 my_mode_print_matched_relation = False
 my_mode_print_matched = False
 my_mode_dot_graph_attr = None
@@ -57,9 +63,9 @@ if _t_str:
     my_mode_layer_max = int(_t_str)
 
 for _s in my_mode[len(_t_str)+my_mode_dot_graph_draw_node_basename_level:]:
-    if _s in ['*']:
+    if _s in [',']:
         my_mode_print_matched = True
-    elif _s in ['?']:
+    elif _s in [';']:
         my_mode_print_matched_relation = True
     elif _s in ['+']:
         my_mode_dot_graph_attr = 'labelloc=b,rankdir=TB'
@@ -67,6 +73,8 @@ for _s in my_mode[len(_t_str)+my_mode_dot_graph_draw_node_basename_level:]:
         my_mode_dot_graph_attr = 'labelloc=t,rankdir=BT'
     elif _s in ['=']:
         my_mode_dot_graph_draw_shape_level += 1
+    elif _s in ['@']:
+        my_mode_node_info_id = True
     elif _s in ['#']:
         my_mode_debug = True
     else:
@@ -78,7 +86,8 @@ my_info = my_mode
 MY_DEBUG_PRINT('# begin for:', my_info)
 
 MY_NODE_PATTERN_TYPES = ['name', 'op', 'id', 'stream_id', 'tvm_blockdim']
-MY_NODE_PATTERN_MODES = ['+', '-', '!', '=']
+# ~!@#$%^&_+-=;',.
+MY_NODE_PATTERN_MODES = ['+', '-', '!', ',', ';']
 MY_NODE_PATTERN_MODE_FILE = ['=']
 MY_NODE_PATTERN_COMMENT = ['#']
 
@@ -86,10 +95,11 @@ MY_NODE_PATTERN_COMMENT = ['#']
 MY_DEBUG_PRINT('parse pattern from pattern file')
 my_remain_argv = sys.argv[3:]
 my_pattern_file = None
+my_node_grad_identity = None
 if my_remain_argv[0][0] in MY_NODE_PATTERN_MODE_FILE:
     if len(my_remain_argv[0]) > 1:
-        my_pattern_file = my_remain_argv[0][1:]
-    elif len(my_remain_argv) == 2:
+        my_node_grad_identity = my_remain_argv[0][1:]
+    if len(my_remain_argv) == 2:
         my_pattern_file = my_remain_argv[1]
     else:
         usage_exit('Error: pattern:', my_remain_argv)
@@ -205,11 +215,13 @@ def is_node_selected(node):
         if is_node_or_str_in_list(node, t, '+'):
             is_in_white_list = True
             is_selected = True
+            break
     if is_in_white_list:
         for t in MY_NODE_PATTERN_TYPES:
             for m in ['-', '!']:
                 if is_node_or_str_in_list(node, t, m):
                     is_selected = False
+                    break
 
     return is_selected
 
@@ -218,14 +230,30 @@ def is_node_blocked(node):
     for t in MY_NODE_PATTERN_TYPES:
         if is_node_or_str_in_list(node, t, '!'):
             is_blocked = True
+            break
     return is_blocked
 
 def is_node_highlight(node):
     is_highlight = False
     for t in MY_NODE_PATTERN_TYPES:
-        if is_node_or_str_in_list(node, t, '='):
+        if is_node_or_str_in_list(node, t, ','):
             is_highlight = True
+            break
     return is_highlight
+
+def my_get_node_highlight_gid(node):
+    _gid = 0
+    for t in MY_NODE_PATTERN_TYPES:
+        if is_node_or_str_in_list(node, t, ','):
+            _gid = 1
+            break
+
+    for t in MY_NODE_PATTERN_TYPES:
+        if is_node_or_str_in_list(node, t, ';'):
+            _gid = 2 if _gid == 0 else 3
+            break
+
+    return _gid
 
 
 MY_DEBUG_PRINT('read graph file and build node lines:', my_fn_in)
@@ -377,6 +405,8 @@ re_node_name_tf2_fix_13_bp_middle = re.compile(r'While_body_while_body_[^/]*/gra
 re_node_name_tf2_fix_21_fb_prefix = re.compile(r'^While_body_while_body_[^/]*/')    # '_r/'
 re_node_name_tf2_fix_22_fb_middle = re.compile(r'/While_body_while_body_[^/]*/')    # '/_r/'
 re_node_name_tf2_fix_23_fb_middle = re.compile(r'While_body_while_body_[^/]*/')    # '/_r/'
+
+re_node_name_my_fix_bp_middle = re.compile(my_node_grad_identity)   # '_g'
 def node_name_strip(name):
     _name_strip = name
     _name_strip = re_node_name_tf1_fix_01_bp_prefix.sub('_r/_g/', _name_strip)
@@ -399,6 +429,8 @@ def node_name_strip(name):
     _name_strip = re_node_name_tf2_fix_21_fb_prefix.sub('_r/', _name_strip)
     _name_strip = re_node_name_tf2_fix_22_fb_middle.sub('/_r/', _name_strip)
     _name_strip = re_node_name_tf2_fix_23_fb_middle.sub('/_r/', _name_strip)
+
+    _name_strip = re_node_name_my_fix_bp_middle.sub('_g', _name_strip)
     return _name_strip
 
 my_nodes = {}
@@ -640,7 +672,7 @@ def get_layer_list_by_node_name_strip(name_strip):
     _t_a_list = [ my_identity + '__' + my_ver ] + _t_a_list
     return _t_a_list, _t_b
 
-def get_g_node_body_label_by_attr(layer_last='', op='', stream_id=None):
+def get_g_node_body_label_by_attr(layer_last='', op='', stream_id=None, id=None):
     _t_op = '<' + op + '>'
     if my_mode_dot_graph_draw_node_basename_level == 0:
         #_t = op
@@ -656,10 +688,11 @@ def get_g_node_body_label_by_attr(layer_last='', op='', stream_id=None):
             _t = _t_op
 
     # TODO display stream_id alternatively
-    '''
-    if stream_id:
-        _t = _t + ' ' + stream_id
-    '''
+    if my_mode_node_info_id:
+        if id and id != MY_EMPTY_STR:
+            _t = id + '_' + _t
+        if stream_id:
+            _t = (stream_id if stream_id != MY_EMPTY_STR else '-') + '_' + _t
     return _t
 
 def get_g_node_body_tooltip_by_attr(uid, node):
@@ -678,14 +711,14 @@ def get_g_node_body_tooltip_by_attr(uid, node):
 
 def get_g_node_body_color_by_attr(node, is_faked=False):
     _t = None
-    if node['tvm_blockdim'] and node['tvm_blockdim'] != MY_EMPTY_STR and ((int(node['tvm_blockdim']) % 32) != 0):
+    if node['tvm_blockdim'] and node['tvm_blockdim'] != MY_EMPTY_STR and ((int(node['tvm_blockdim']) % 32) == 0):
         _t = 'dimgray'
     return _t
 
 def get_g_node_body_fill_color_by_attr(node, is_faked=False):
-    _t = None
-    if is_node_highlight(node):
-        _t = 'lightcyan'
+    _gid = my_get_node_highlight_gid(node)
+    _t = [None, 'lightcyan', 'lavenderblush', 'lightgray'][_gid]
+
     return _t
 
 def get_g_node_body_by_attr(uid, label, tooltip, color=None, fillcolor=None, size=None):
@@ -763,7 +796,7 @@ for _node in my_nodes_selected.values():
     for _node_layer in _node_layer_list:
         _g_node_begin = ''.join([_g_node_begin, 'subgraph cluster_' + _node_layer + ' { label="' + _node_layer + '"; '])
         _g_node_end = ''.join([_g_node_end, '} '])
-    _g_node_label = get_g_node_body_label_by_attr(_node_layer_last, _node['op_reformat'], _node['stream_id'])
+    _g_node_label = get_g_node_body_label_by_attr(_node_layer_last, _node['op_reformat'], _node['stream_id'], _node['id'])
     _g_node_tooltip = get_g_node_body_tooltip_by_attr(_node_uid, _node)
     _g_node_color = get_g_node_body_color_by_attr(_node)
     _g_node_fill_color = get_g_node_body_fill_color_by_attr(_node)
@@ -787,7 +820,7 @@ for _node in my_nodes_selected.values():
             _prev_node_fake_uid = _prev_node['uid']
             # XXX hack real layers to make graph more simple
             _prev_node_layer_last = ''
-            _g_prev_node_label = get_g_node_body_label_by_attr(_prev_node_layer_last, _prev_node['op_reformat'], _prev_node['stream_id'])
+            _g_prev_node_label = get_g_node_body_label_by_attr(_prev_node_layer_last, _prev_node['op_reformat'], _prev_node['stream_id'], _prev_node['id'])
             _g_prev_node_tooltip = get_g_node_body_tooltip_by_attr(_prev_node_fake_uid, _prev_node)
             _g_prev_node_color = get_g_node_body_color_by_attr(_prev_node, True)
             _g_prev_node_fill_color = get_g_node_body_fill_color_by_attr(_prev_node, True)
@@ -829,7 +862,7 @@ for _node in my_nodes_selected.values():
                 _next_node_fake_uid = _next_node['uid']
                 # XXX hack real layers to make graph more simple
                 _next_node_layer_last = ''
-                _g_next_node_label = get_g_node_body_label_by_attr(_next_node_layer_last, _next_node['op_reformat'], _next_node['stream_id'])
+                _g_next_node_label = get_g_node_body_label_by_attr(_next_node_layer_last, _next_node['op_reformat'], _next_node['stream_id'], _next_node['id'])
                 _g_next_node_tooltip = get_g_node_body_tooltip_by_attr(_next_node_fake_uid, _next_node)
                 _g_next_node_color = get_g_node_body_color_by_attr(_next_node, True)
                 _g_next_node_fill_color = get_g_node_body_fill_color_by_attr(_next_node, True)
