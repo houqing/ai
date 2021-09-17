@@ -95,7 +95,7 @@ MY_NODE_PATTERN_COMMENT = ['#']
 MY_DEBUG_PRINT('parse pattern from pattern file')
 my_remain_argv = sys.argv[3:]
 my_pattern_file = None
-my_node_grad_identity = None
+my_node_grad_identity = '^$'
 if my_remain_argv[0][0] in MY_NODE_PATTERN_MODE_FILE:
     if len(my_remain_argv[0]) > 1:
         my_node_grad_identity = my_remain_argv[0][1:]
