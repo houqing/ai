@@ -272,13 +272,19 @@ with open(my_fn_in, 'rb') as f:
         _t = ''.join([x for x in _t if x.startswith('  ') and not x.startswith('  name: ')])
         _t = re.sub(r'[\r\n]', r'', _t).strip()
         _t = re.sub(r'  node {', r'\nnode {', _t)
-        my_in_lines = _t.split('\n')
+        my_in_lines_raw = _t.split('\n')
+        my_in_lines = []
+        for (_i, _l) in enumerate(my_in_lines_raw):
+            my_in_lines.append(re.sub(r'    op_type: "', r'    my_uid: "'+str(_i)+'"    op_type: "', _l))
     elif my_in_format == 'tf':
         _t = re.sub(r'[\r\n]', r'', _t).strip()
         _t = re.sub(r'node {', r'\nnode {', _t)
         _t = re.sub(r'library {', r'\nlibrary {', _t)
         _t = re.sub(r'versions {', r'\nversions {', _t)
-        my_in_lines = re.findall(r'node {.*', _t)
+        my_in_lines_raw = re.findall(r'node {.*', _t)
+        my_in_lines = []
+        for (_i, _l) in enumerate(my_in_lines_raw):
+            my_in_lines.append(re.sub(r'  op: "', r'  my_uid: "'+str(_i)+'"  op: "', _l))
     else:
         assert(False)
         _t = _t.split('\n')
@@ -378,6 +384,23 @@ elif my_in_format == 'tf':
     # input/output
     re_node_param_off_section = re.compile(MY_UNSUPPORTED_PATTERN)
     re_node_param_name_section = re.compile(MY_UNSUPPORTED_PATTERN)
+
+    # input: 
+    re_node_in_dtype_list = re.compile(r'      name: "input_desc_dtype:[^ ]*" * s: "([^ "]*)"')
+    re_node_in_layout_list = re.compile(r'      name: "input_desc_layout:[^ ]*" * s: "([^ "]*)"')
+    re_node_in_shape_list = re.compile(r'      name: "input_desc_shape:[^ ]*" * ([^}]*)}')
+    re_node_in_dtype_orig_list = re.compile(r'      name: "input_desc_origin_dtype:[^ ]*" * s: "([^ "]*)"')
+    re_node_in_layout_orig_list = re.compile(r'      name: "input_desc_origin_layout:[^ ]*" * s: "([^ "]*)"')
+    re_node_in_shape_orig_list = re.compile(r'      name: "input_desc_origin_shape:[^ ]*" * ([^}]*)}')
+
+    # output:
+    re_node_out_dtype_list = re.compile(r'      name: "output_desc_dtype:[^ ]*" * s: "([^ "]*)"')
+    re_node_out_layout_list = re.compile(r'      name: "output_desc_layout:[^ ]*" * s: "([^ "]*)"')
+    re_node_out_shape_list = re.compile(r'      name: "output_desc_shape:[^ ]*" * ([^}]*)}')
+    re_node_out_dtype_orig_list = re.compile(r'      name: "output_desc_origin_dtype:[^ ]*" * s: "([^ "]*)"')
+    re_node_out_layout_orig_list = re.compile(r'      name: "output_desc_origin_layout:[^ ]*" * s: "([^ "]*)"')
+    re_node_out_shape_orig_list = re.compile(r'      name: "output_desc_origin_shape:[^ ]*" * ([^}]*)}')
+
 else:
     re_node_in_name_off_list = re.compile(r'    input: "([^ "]*)"')
     assert(False)
