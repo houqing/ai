@@ -8,7 +8,7 @@ import sys
 
 import numpy as np
 
-VER=14
+VER=16
 
 def usage_exit(err_info='', err_no=-1):
     if err_info:
@@ -204,6 +204,12 @@ if len(f_type) == 3:
 st_a_pick_data_total = len(a)
 st_b_pick_data_total = len(b)
 
+# data sort
+if is_sort:
+    _arg_sort = np.argsort(a)
+    a = np.take(a, _arg_sort)
+    b = np.take(b, _arg_sort)
+
 # data seg
 _seg_begin = 0
 _seg_end = st_pick_data_total
@@ -221,6 +227,7 @@ a = a[_seg_begin:_seg_end]
 b = b[_seg_begin:_seg_end]
 st_a_seg_data_total = len(a)
 st_b_seg_data_total = len(b)
+st_seg_data_total = st_a_seg_data_total
 
 
 # precision fix
@@ -247,37 +254,39 @@ _st_zamb = _st_a_zero - _st_b_zero
 _st_pamb = _st_a_pos - _st_b_pos
 _st_namb = _st_a_neg - _st_b_neg
 _st_zamb_info = ' zamb='+str(_st_zamb)
-_st_zbma_info = ' zbma='+str(-_st_zamb)
+_st_zbma_info = _st_zamb_info
 _st_pamb_info = ' pamb='+str(_st_pamb)
-_st_pbma_info = ' pbma='+str(-_st_pamb)
+_st_pbma_info = _st_pamb_info
 _st_namb_info = ' namb='+str(_st_namb)
-_st_nbma_info = ' nbma='+str(-_st_namb)
+_st_nbma_info = _st_namb_info
 _st_zapb = _st_a_zero + _st_b_zero
 _st_zabd = (abs(_st_zamb) / _st_zapb) if _st_zapb != 0 else _st_zapb
 _st_zabd = float(_st_zabd)
 _st_zambd_info = ' zabd='+str(_st_zabd)
-_st_zbmad_info = ' zabd='+str(_st_zabd)
+_st_zbmad_info = _st_zambd_info
+_st_zdp = abs(_st_zamb) / st_seg_data_total
+_st_zdp_info = ' zdp='+str(_st_zdp)
+_st_pdp = abs(_st_pamb) / st_seg_data_total
+_st_pdp_info = ' pdp='+str(_st_pdp)
+_st_ndp = abs(_st_namb) / st_seg_data_total
+_st_ndp_info = ' ndp='+str(_st_ndp)
 
 _st_a_pick_info = str(st_a_pick_data_total)+'#' if my_is_data_pick else ''
 _st_a_seg_info = str(st_a_seg_data_total)+'@'+str(_seg_begin)+'/'+str(_seg_end)+'#' if my_is_data_seg else ''
-st_a_info = 't='+_st_a_seg_info+_st_a_pick_info+str(st_a_total_raw)+' s='+str(st_a_shape_raw)+' inf='+str(_st_a_inf)+' nan='+str(_st_a_nan)+' z='+str(_st_a_zero)+' p='+str(_st_a_pos)+' n='+str(_st_a_neg)+_st_zamb_info+_st_pamb_info+_st_namb_info+_st_zambd_info
+st_a_info = 't='+_st_a_seg_info+_st_a_pick_info+str(st_a_total_raw)+' s='+str(st_a_shape_raw)+' inf='+str(_st_a_inf)+' nan='+str(_st_a_nan)+' z='+str(_st_a_zero)+' p='+str(_st_a_pos)+' n='+str(_st_a_neg)+_st_zamb_info+_st_pamb_info+_st_namb_info+_st_zambd_info+_st_zdp_info+_st_pdp_info+_st_ndp_info
 build_out_info(output_info, 'info_a: ' + st_a_info)
 _st_b_pick_info = str(st_b_pick_data_total)+'#' if my_is_data_pick else ''
 _st_b_seg_info = str(st_b_seg_data_total)+'@'+str(_seg_begin)+'/'+str(_seg_end)+'#' if my_is_data_seg else ''
-st_b_info = 't='+_st_b_seg_info+_st_b_pick_info+str(st_b_total_raw)+' s='+str(st_b_shape_raw)+' inf='+str(_st_b_inf)+' nan='+str(_st_b_nan)+' z='+str(_st_b_zero)+' p='+str(_st_b_pos)+' n='+str(_st_b_neg)+_st_zbma_info+_st_pbma_info+_st_nbma_info+_st_zambd_info
+st_b_info = 't='+_st_b_seg_info+_st_b_pick_info+str(st_b_total_raw)+' s='+str(st_b_shape_raw)+' inf='+str(_st_b_inf)+' nan='+str(_st_b_nan)+' z='+str(_st_b_zero)+' p='+str(_st_b_pos)+' n='+str(_st_b_neg)+_st_zbma_info+_st_pbma_info+_st_nbma_info+_st_zambd_info+_st_zdp_info+_st_pdp_info+_st_ndp_info
 build_out_info(output_info, 'info_b: ' + st_b_info)
 
 
 # process input
-if is_sort:
-    _arg_sort = np.argsort(a)
-    g_aa = np.take(a, _arg_sort)
-    g_bb = np.take(b, _arg_sort)
-else:
-    g_aa = a
-    g_bb = b
+g_aa = a
+g_bb = b
 
-def calc_canb_dist_pairwise(data_a, data_b):
+
+def calc_canb_dist_elemwise(data_a, data_b):
     _abs_sum = np.abs(data_a) + np.abs(data_b)
     _sub_abs = np.abs(data_a - data_b)
     _arg_zeros = np.argwhere(np.equal(_abs_sum, 0))
@@ -307,14 +316,14 @@ def calc_js_dist(data_a, data_b):
     return _js
 
 # function to generate data averages
-def gen_max_min_avg(data, mode='all'):  # mode:all|pos|neg|pos2|neg2
-    if mode in ['pos', 'pos2']:
+def gen_max_min_avg(data, mode='all'):  # mode:all|avg|avg2|pos|neg|pos2|neg2|pos4|neg4
+    if mode in ['pos', 'pos2', 'pos4']:
         _arg_data = np.argwhere(np.greater(data, 0))
-        _d = np.take(data, _arg_data)
-    elif mode in ['neg', 'neg2']:
+        _d = np.take(data, _arg_data).reshape(-1)
+    elif mode in ['neg', 'neg2', 'neg4']:
         _arg_data = np.argwhere(np.less(data, 0))
-        _d = np.take(data, _arg_data)
-    elif mode in ['all']:
+        _d = np.take(data, _arg_data).reshape(-1)
+    elif mode in ['all', 'avg', 'avg2']:
         _d = data
     else:
         usage_exit('Error: bad mode ' + mode)
@@ -329,6 +338,47 @@ def gen_max_min_avg(data, mode='all'):  # mode:all|pos|neg|pos2|neg2
         _max = np.max(_d)
         _avg = np.mean(_d)
         return _max, _avg
+    elif mode == 'pos4':
+        _max = np.max(_d)
+        _min = np.min(_d)
+        _avg = np.mean(_d)
+        _arg_data = np.argwhere(np.greater_equal(_d, _avg))
+        _dmaxa = np.take(_d, _arg_data).reshape(-1)
+        if len(_dmaxa) == 0:
+            _dmaxa = [0]
+        _avg_max = np.mean(_dmaxa)
+        _arg_data = np.argwhere(np.less(_d, _avg))
+        _dmina = np.take(_d, _arg_data).reshape(-1)
+        if len(_dmina) == 0:
+            _dmina = [0]
+        _avg_min = np.mean(_dmina)
+        return _max, _min, _avg, _avg_max, _avg_min
+    elif mode == 'neg4':
+        _max = np.max(_d)
+        _min = np.min(_d)
+        _avg = np.mean(_d)
+        _arg_data = np.argwhere(np.less_equal(_d, _avg))
+        _dmina = np.take(_d, _arg_data).reshape(-1)
+        if len(_dmina) == 0:
+            _dmina = [0]
+        _avg_min = np.mean(_dmina)
+        _arg_data = np.argwhere(np.greater(_d, _avg))
+        _dmaxa = np.take(_d, _arg_data).reshape(-1)
+        if len(_dmaxa) == 0:
+            _dmaxa = [0]
+        _avg_max = np.mean(_dmaxa)
+        return _max, _min, _avg, _avg_max, _avg_min
+    elif mode == 'avg':
+        _avg = np.mean(_d)
+        return _avg
+    elif mode == 'avg2':
+        _avg = np.mean(_d)
+        _arg_data = np.argwhere(np.not_equal(data, 0))
+        _dnz = np.take(data, _arg_data).reshape(-1)
+        if len(_dnz) == 0:
+            _dnz = [0]
+        _avg_nz = np.mean(_dnz)
+        return _avg, _avg_nz
     else:
         _max = np.max(_d)
         _min = np.min(_d)
@@ -344,14 +394,18 @@ np.put(g_bb, _arg_bb_inf_nan, 0)
 
 
 # calc data statistic
-g_aa_pos_max_s, g_aa_pos_min_s, g_aa_pos_avg_s = gen_max_min_avg(g_aa, mode='pos')
-g_aa_neg_max_s, g_aa_neg_min_s, g_aa_neg_avg_s = gen_max_min_avg(g_aa, mode='neg')
-g_data_a_info = 'pmax='+str(g_aa_pos_max_s)+' nmin='+str(g_aa_neg_min_s)+' pavg='+str(g_aa_pos_avg_s)+' navg='+str(g_aa_neg_avg_s)+' pmin='+str(g_aa_pos_min_s)+' nmax='+str(g_aa_neg_max_s)
+g_aa_avg_s, g_aa_avg_nz_s = gen_max_min_avg(g_aa, mode='avg2')
+g_aa_pos_max_s, g_aa_pos_min_s, g_aa_pos_avg_s, g_aa_pos_max_avg_s, g_aa_pos_min_avg_s = gen_max_min_avg(g_aa, mode='pos4')
+g_aa_neg_max_s, g_aa_neg_min_s, g_aa_neg_avg_s, g_aa_neg_max_avg_s, g_aa_neg_min_avg_s = gen_max_min_avg(g_aa, mode='neg4')
+g_data_a_info = 'pmax='+str(g_aa_pos_max_s)+' nmin='+str(g_aa_neg_min_s)+' avg='+str(g_aa_avg_s)+' avgnz='+str(g_aa_avg_nz_s)+' pavg='+str(g_aa_pos_avg_s)+' navg='+str(g_aa_neg_avg_s)+' pmin='+str(g_aa_pos_min_s)+' nmax='+str(g_aa_neg_max_s)
+g_data_a_info = g_data_a_info+' pmaxa='+str(g_aa_pos_max_avg_s)+' pmina='+str(g_aa_pos_min_avg_s)+' nmaxa='+str(g_aa_neg_max_avg_s)+' nmina='+str(g_aa_neg_min_avg_s)
 build_out_info(output_info, 'data_a: ' + g_data_a_info)
 
-g_bb_pos_max_s, g_bb_pos_min_s, g_bb_pos_avg_s = gen_max_min_avg(g_bb, mode='pos')
-g_bb_neg_max_s, g_bb_neg_min_s, g_bb_neg_avg_s = gen_max_min_avg(g_bb, mode='neg')
-g_data_b_info = 'pmax='+str(g_bb_pos_max_s)+' nmin='+str(g_bb_neg_min_s)+' pavg='+str(g_bb_pos_avg_s)+' navg='+str(g_bb_neg_avg_s)+' pmin='+str(g_bb_pos_min_s)+' nmax='+str(g_bb_neg_max_s)
+g_bb_avg_s, g_bb_avg_nz_s = gen_max_min_avg(g_bb, mode='avg2')
+g_bb_pos_max_s, g_bb_pos_min_s, g_bb_pos_avg_s, g_bb_pos_max_avg_s, g_bb_pos_min_avg_s = gen_max_min_avg(g_bb, mode='pos4')
+g_bb_neg_max_s, g_bb_neg_min_s, g_bb_neg_avg_s, g_bb_neg_max_avg_s, g_bb_neg_min_avg_s = gen_max_min_avg(g_bb, mode='neg4')
+g_data_b_info = 'pmax='+str(g_bb_pos_max_s)+' nmin='+str(g_bb_neg_min_s)+' avg='+str(g_bb_avg_s)+' avgnz='+str(g_bb_avg_nz_s)+' pavg='+str(g_bb_pos_avg_s)+' navg='+str(g_bb_neg_avg_s)+' pmin='+str(g_bb_pos_min_s)+' nmax='+str(g_bb_neg_max_s)
+g_data_b_info = g_data_b_info+' pmaxa='+str(g_bb_pos_max_avg_s)+' pmina='+str(g_bb_pos_min_avg_s)+' nmaxa='+str(g_bb_neg_max_avg_s)+' nmina='+str(g_bb_neg_min_avg_s)
 build_out_info(output_info, 'data_b: ' + g_data_b_info)
 
 
@@ -367,7 +421,7 @@ if is_calc_inc:
 
 # calc canberra dist
 if is_calc_rel:
-    g_diff_rel = calc_canb_dist_pairwise(g_aa, g_bb)
+    g_diff_rel = calc_canb_dist_elemwise(g_aa, g_bb)
     g_diff_rel_max_s, g_diff_rel_min_s, g_diff_rel_avg_s = gen_max_min_avg(g_diff_rel, mode='all')
     g_diff_rel_pos_min_s, g_diff_rel_pos_avg_s = gen_max_min_avg(g_diff_rel, mode='pos2')
     g_diff_rel_pos_max_s = g_diff_rel_max_s
@@ -463,7 +517,7 @@ if not is_out_no_fig:
     fig_thresh_linewidth = 0.05
     fig_alpha = 0.5
     if is_marker_factor_auto:
-        _fig_markersize_factor = max(0.11, (30 / np.log(st_pick_data_total + 1) + -1.55))
+        _fig_markersize_factor = max(0.11, (30 / np.log(st_seg_data_total + 1) + -1.55))
     else:
         _fig_markersize_factor = 1
     fig_markersize_a = 1.6 * _fig_markersize_factor
@@ -472,7 +526,7 @@ if not is_out_no_fig:
     fig_markersize = 1.5 * _fig_markersize_factor
     fig_legend_fontsize = 'xx-small'
     fig_legend_alpha = 0.6
-    fig_legend_label_color = 'lime'
+    fig_legend_label_color = 'lightgray'
 
     _subg_mark = [1, is_calc_inc, is_calc_rel, is_calc_b16, is_calc_b32]
     _subg_num = sum(_subg_mark)
