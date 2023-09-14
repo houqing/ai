@@ -8,12 +8,12 @@ import sys
 
 import numpy as np
 
-VER=16
+VER=17
 
 def usage_exit(err_info='', err_no=-1):
     if err_info:
         print('Error: ', err_info)
-    print('Usage:', sys.argv[0], '<file_a> <file_b> <fp16|fp32|npy>-<fp16|fp32|npy>')
+    print('Usage:', sys.argv[0], '<file_a> <file_b> <fp16|fp32|npy|pt>-<fp16|fp32|npy|pt>')
     exit(err_no)
 
 if len(sys.argv) < 4:
@@ -115,6 +115,14 @@ elif f_type[0] in [ 'npy', 'np', 'n' ]:
     a = np.load(f_a)
     a_t = 'n'+str(a.dtype)
     a_dtype = a.dtype
+elif f_type[0] in [ 'pt', 'p' ]:
+    import torch
+    a = torch.load(f_a, map_location=torch.device('cpu'))
+    a_t = 'p'+str(a.dtype).lstrip("torch.")
+    if a.dtype is torch.bfloat16:
+        a = a.type(torch.float32)
+    a = a.detach().numpy()
+    a_dtype = a.dtype
 else:
     usage_exit()
 
@@ -131,6 +139,14 @@ if not my_is_same_ab:
     elif f_type[1] in [ 'npy', 'np', 'n' ]:
         b = np.load(f_b)
         b_t = 'n'+str(b.dtype)
+        b_dtype = b.dtype
+    elif f_type[0] in [ 'pt', 'p' ]:
+        import torch
+        b = torch.load(f_b, map_location=torch.device('cpu'))
+        b_t = 'p'+str(b.dtype).lstrip("torch.")
+        if b.dtype is torch.bfloat16:
+            b = b.type(torch.float32)
+        b = b.detach().numpy()
         b_dtype = b.dtype
     else:
         usage_exit()
@@ -629,3 +645,4 @@ if not is_out_no_fig:
 
     plt.subplots_adjust(hspace=0.1)
     plt.savefig(f_out_fig, bbox_inches='tight', transparent=True)
+
