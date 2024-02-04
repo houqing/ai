@@ -9,131 +9,56 @@ import math
 import numpy as np
 import torch
 
-VER="5b"
+VER="4b"
 
 is_debug = False
-is_strict_check = False
 
-def usage_exit(err_info='', err_no=-1):
-    if err_info:
-        print('Error: ', err_info)
-    print('Usage:', sys.argv[0], '<file_gold> <file_a> <file_b> <DTYPE>-<DTYPE>-<DTYPE>')
-    print('    DTYPE: <pt|npy|bf16|fp16|fp32|fp64>')
-    exit(err_no)
-
-
-# 
-
-VAL_PRECISION_FP16 = 1e-3
-VAL_PRECISION_BF16 = 8e-3
-VAL_PRECISION_FP32 = 1e-7
-
-VAL_TINY_FP16 = 1e-6
-VAL_TINY_BF16 = 8e-6
-VAL_TINY_FP32 = 1e-10
-VAL_SMALL_FP16 = 1e-3
-VAL_SMALL_BF16 = 1e-2
-VAL_SMALL_FP32 = 1e-7
 VAL_RELATIVE_SMALL_LIST_SORTED = sorted(set([1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3]))
 assert(VAL_RELATIVE_SMALL_LIST_SORTED != 0)
 VAL_RELATIVE_SMALL_LIMIT_NUM_MAX = 4096
-VAL_RELATIVE_SMALL_LIMIT_RATIO_MAX = 0.75
+VAL_RELATIVE_SMALL_LIMIT_RATIO_MAX = 0.25
 
 if len(sys.argv) > 4:
     fn_g = sys.argv[1]
     fn_a = sys.argv[2]
     fn_b = sys.argv[3]
-    f_dtype_list_str = sys.argv[4]
+    fn_dtype = sys.argv[4]
+    if len(sys.argv) > 5:
+        dtype_adjust_to = sys.argv[5]
+    else:
+        dtype_adjust_to = None
 else:
-    usage_exit()
+    print("Usage: G A B <pt|npy>")
+    exit()
 
-is_check_finite = False
-is_verbose = False
+print("Error: You should do following modification before run this script")
+print("  1. modify the tolerance values (search 'measure: estimate tolerance')")
+print("  2. remove these warning lines"); exit()
 
-if len(sys.argv) >= 5:
-    for arg in sys.argv[5:]:
-        if arg in [ "fin", "finite" ]:
-            is_check_finite = True
-        elif arg in [ "nofin", "nofinite" ]:
-            is_check_finite = False
-        elif arg in [ "strict" ]:
-            is_strict_check = True
-        elif arg in [ "nostrict" ]:
-            is_strict_check = False
-        elif arg in [ "v", "verbose" ]:
-            is_verbose = True
-        elif arg in [ "nov", "noverbose" ]:
-            is_verbose = False
-        else:
-            usage_exit(f'unknown parameter [{arg}]')
-
-def load_data_from_file(fn, f_dtype):
-    _d = None
-    _d_t = None
-    try:
-        if f_dtype in [ "pt", "torch" ]:
-            _d = torch.load(fn, map_location=torch.device('cpu')).detach()
-            _d_t = 'p' + str(_d.dtype).lstrip("torch.").lower()
-        elif f_dtype in [ "np", "npy", "numpy" ]:
-            _d = torch.from_numpy(np.load(fn))
-            _d_t = 'n' + str(_d.dtype).lstrip("torch.").lower()
-        elif f_dtype in [ "bf16", "bfloat16" ]:
-            _d = torch.from_numpy(np.fromfile(fn, np.uint8))
-            _d = _d.view(torch.bfloat16)
-            _d_t = 'rbfloat16'
-        elif f_dtype in [ "fp16", "float16", "f16" ]:
-            _d = torch.from_numpy(np.fromfile(fn, np.float16))
-            _d_t = 'rfloat16'
-        elif f_dtype in [ "fp32", "float32", "f32" ]:
-            _d = torch.from_numpy(np.fromfile(fn, np.float32))
-            _d_t = 'rfloat32'
-        elif f_dtype in [ "fp64", "float64", "f64" ]:
-            _d = torch.from_numpy(np.fromfile(fn, np.float64))
-            _d_t = 'rfloat32'
-        else:
-            usage_exit(f'invalid file dtype [{f_dtype}]')
-    except Exception as e:
-        usage_exit(f'failed loading file [{fn}] with data format [{f_dtype}] ({e})')
-
-    return _d, _d_t
-
-f_dtype_list = f_dtype_list_str.split('-')
-
-if len(f_dtype_list) == 1:
-    g_t = f_dtype_list[0]
-    a_t = f_dtype_list[0]
-    b_t = f_dtype_list[0]
-elif len(f_dtype_list) == 2:
-    g_t = f_dtype_list[0]
-    a_t = f_dtype_list[1]
-    b_t = f_dtype_list[1]
-elif len(f_dtype_list) == 3:
-    g_t = f_dtype_list[0]
-    a_t = f_dtype_list[1]
-    b_t = f_dtype_list[2]
+if fn_dtype == "pt":
+    g = torch.load(fn_g, map_location=torch.device('cpu')).detach()
+    a = torch.load(fn_a, map_location=torch.device('cpu')).detach()
+    b = torch.load(fn_b, map_location=torch.device('cpu')).detach()
+elif fn_dtype == "npy":
+    g = torch.from_numpy(np.load(fn_g))
+    a = torch.from_numpy(np.load(fn_a))
+    b = torch.from_numpy(np.load(fn_b))
+elif fn_dtype == "bin-test":
+    import tensorflow as tf
+    g = torch.from_numpy(np.fromfile(fn_g, np.float32))
+    a = torch.load(fn_a, map_location=torch.device('cpu')).detach()
+    b = torch.from_numpy(np.fromfile(fn_b, tf.bfloat16.as_numpy_dtype))
+elif fn_dtype == "bin":
+    print("Not implemented file type:", fn_dtype)
+    exit()
 else:
-    usage_exit()
-
-g, g_t = load_data_from_file(fn_g, g_t)
-a, a_t = load_data_from_file(fn_a, a_t)
-b, b_t = load_data_from_file(fn_b, b_t)
-
-all_t_str = g_t + a_t + b_t
-if "bfloat16" in all_t_str:
-    val_small_candidate = VAL_SMALL_BF16
-    val_precision = VAL_PRECISION_BF16
-elif "float16" in all_t_str:
-    val_small_candidate = VAL_SMALL_FP16
-    val_precision = VAL_PRECISION_FP16
-else:
-    val_small_candidate = VAL_SMALL_FP32
-    val_precision = VAL_PRECISION_FP32
-
+    print("Not supported file type:", fn_dtype)
+    exit()
 
 # all: cast to float64
-g0 = g.type(torch.float64).flatten()
-a0 = a.type(torch.float64).flatten()
-b0 = b.type(torch.float64).flatten()
+g0 = g.type(torch.float64)
+a0 = a.type(torch.float64)
+b0 = b.type(torch.float64)
 
 # debug data:
 if is_debug:
@@ -145,51 +70,32 @@ if is_debug:
     a0 = torch.tensor([0.01, 0.0, 0.0, 1.2, 0.000000, -0.21, 0.00005, -0.000015, 0.000002, 0.0000], dtype=torch.float64)
     b0 = torch.tensor([0.01, 0.0, -2, 0.0, 0.000000, -0.23, 0.00005, -0.000010, 0.000005, 0.0001], dtype=torch.float64)
     #b0 = torch.tensor([0.01, 0.0, -2, 1.1, float("nan"), -0.23, 0.00005, float("nan"), float("nan"), 0.0001], dtype=torch.float64)
-    print("G," + ','.join('{:0.16f}'.format(i.item()) for i in g0))
-    print("A," + ','.join('{:0.16f}'.format(i.item()) for i in a0))
-    print("B," + ','.join('{:0.16f}'.format(i.item()) for i in b0))
+    print("G," + ','.join('{:0.10f}'.format(i.item()) for i in g0))
+    print("A," + ','.join('{:0.10f}'.format(i.item()) for i in a0))
+    print("B," + ','.join('{:0.10f}'.format(i.item()) for i in b0))
 
 def calc_mask_num(mask):
-    if is_strict_check:
-        assert(mask.max() <= 1.0)
-        assert(mask.min() >= 0.0)
+    assert(mask.max() <= 1.0)
+    assert(mask.min() >= 0.0)
     return torch.sum(mask).to(torch.int).item()
 
 # base: mark values
-def calc_data_info(D, topk_sample_num=8):
+def calc_data_info(D):
     _zero__mask = torch.where(D == 0.0, torch.tensor(1.0, dtype=torch.float64), torch.tensor(0.0, dtype=torch.float64))
     _zero__num = calc_mask_num(_zero__mask)
-    if is_check_finite:
-        _inf__mask = torch.where(torch.isinf(D), torch.tensor(1.0, dtype=torch.float64), torch.tensor(0.0, dtype=torch.float64))
-        _inf__num = calc_mask_num(_inf__mask)
-        _nan__mask = torch.where(torch.isnan(D), torch.tensor(1.0, dtype=torch.float64), torch.tensor(0.0, dtype=torch.float64))
-        _nan__num = calc_mask_num(_nan__mask)
-        _finite = torch.where(torch.isfinite(D), D, 0.0)
-    else:
-        _inf__mask = torch.zeros_like(D)
-        _inf__num = 0.0
-        _nan__mask = _inf__mask
-        _nan__num = 0.0
-        _finite = D
+    _inf__mask = torch.where(torch.isinf(D), torch.tensor(1.0, dtype=torch.float64), torch.tensor(0.0, dtype=torch.float64))
+    _inf__num = calc_mask_num(_inf__mask)
+    _nan__mask = torch.where(torch.isnan(D), torch.tensor(1.0, dtype=torch.float64), torch.tensor(0.0, dtype=torch.float64))
+    _nan__num = calc_mask_num(_nan__mask)
+    _finite = torch.where(torch.isfinite(D), D, 0.0)
     _finite__max = torch.max(_finite).item()
     _finite__min = torch.min(_finite).item()
     _finite_abs = torch.abs(_finite)
     _finite_abs__avg = torch.mean(_finite_abs).item()
 
-    if topk_sample_num > 0:
-        _finite_abs__max = torch.max(_finite_abs).item()
-        _finite_abs__max_topk, _ = _finite_abs.topk(topk_sample_num)
-        _finite_abs__max_topk_avg = _finite_abs__max_topk.mean().item()
-        _finite_abs_hide_zero = torch.where((_finite_abs != 0.0), _finite_abs, _finite_abs__max + val_precision)
-        _finite_abs__min_topk, _ = _finite_abs_hide_zero.topk(topk_sample_num, largest=False)
-        _finite_abs__min_topk_avg = _finite_abs__min_topk.mean().item()
-    else:
-        _finite_abs__max_topk_avg = 0.0
-        _finite_abs__min_topk_avg = 0.0
-
     if is_debug:
         print("")
-        #print("D," + ','.join('{:0.16f}'.format(i.item()) for i in D))
+        #print("D," + ','.join('{:0.10f}'.format(i.item()) for i in D))
         print("total,", D.numel())
         print("inf," + ','.join('{:0.0f}'.format(i.item()) for i in _inf__mask))
         print("nan," + ','.join('{:0.0f}'.format(i.item()) for i in _nan__mask))
@@ -197,7 +103,7 @@ def calc_data_info(D, topk_sample_num=8):
         print(f"max,{_finite__max}")
         print(f"min,{_finite__min}")
 
-    return _finite, _finite_abs, _finite__max, _finite__min, _finite_abs__avg, _inf__mask, _inf__num, _nan__mask, _nan__num, _zero__mask, _zero__num, _finite_abs__max_topk_avg, _finite_abs__min_topk_avg
+    return _finite, _finite_abs, _finite__max, _finite__min, _finite_abs__avg, _inf__mask, _inf__num, _nan__mask, _nan__num, _zero__mask, _zero__num
 
 def calc_data_value_info(D_abs, D_zero__mask, val_small=0.0):
     _large__mask = torch.where(D_abs >= val_small, torch.tensor(1.0, dtype=torch.float64), torch.tensor(0.0, dtype=torch.float64))
@@ -208,98 +114,42 @@ def calc_data_value_info(D_abs, D_zero__mask, val_small=0.0):
     return D_abs.numel(), _large__num, _small__num
 
 # mark: inf nan
-g1, g1_abs, g1__max, g1__min, g1_abs__avg, g1_inf__mask, g1_inf__num, g1_nan__mask, g1_nan__num, g1_zero__mask, g1_zero__num, g1_abs__max_topk, g1_abs__min_topk = calc_data_info(g0)
-a1, a1_abs, a1__max, a1__min, a1_abs__avg, a1_inf__mask, a1_inf__num, a1_nan__mask, a1_nan__num, a1_zero__mask, a1_zero__num, a1_abs__max_topk, a1_abs__min_topk = calc_data_info(a0, topk_sample_num=0)
-b1, b1_abs, b1__max, b1__min, b1_abs__avg, b1_inf__mask, b1_inf__num, b1_nan__mask, b1_nan__num, b1_zero__mask, b1_zero__num, b1_abs__max_topk, b1_abs__min_topk = calc_data_info(b0, topk_sample_num=0)
+g1, g1_abs, g1__max, g1__min, g1_abs__avg, g1_inf__mask, g1_inf__num, g1_nan__mask, g1_nan__num, g1_zero__mask, g1_zero__num = calc_data_info(g0)
+a1, a1_abs, a1__max, a1__min, a1_abs__avg, a1_inf__mask, a1_inf__num, a1_nan__mask, a1_nan__num, a1_zero__mask, a1_zero__num = calc_data_info(a0)
+b1, b1_abs, b1__max, b1__min, b1_abs__avg, b1_inf__mask, b1_inf__num, b1_nan__mask, b1_nan__num, b1_zero__mask, b1_zero__num = calc_data_info(b0)
 
 # mark: all finite
-if is_check_finite:
-    all_sum = torch.sum(torch.stack([g0, a0, b0]), dim=0)
-    all_finite__mask = torch.where(torch.isfinite(all_sum), torch.tensor(1.0, dtype=torch.float64), torch.tensor(0.0, dtype=torch.float64))
-    all_finite__num = calc_mask_num(all_finite__mask)
-    if is_debug:
-        print("all fnt,", all_finite__mask)
-
-
-########
-# (large, large_min], (large_min, small_min], (small_min, zero)
-
-def calc_data_boundary(D_abs, D_abs_zero_mask, topk_sample_num=8):
-    _large_topk, _ = D_abs.topk(topk_sample_num)
-    _large_topk__mean = torch.mean(_large_topk)
-    _large__min = _large_topk__mean * val_precision       # scale down
-
-    _d_zero_fill_by_large = torch.where(D_abs == 0.0, _large_topk.max(), D_abs)
-
-    _small_topk, _ = _d_zero_fill_by_large.topk(topk_sample_num, largest=False)
-    _small_topk__mean = torch.mean(_small_topk)
-    _small__min = _small_topk__mean / val_precision     # scale up
-
-    return _large_topk__mean.item(), _large__min.item(), _small_topk__mean.item(), _small__min.item()
-
-g1__large, g1__large_min, g1__small, g1__small_min = calc_data_boundary(g1_abs, g1_zero__mask, topk_sample_num=8)
-print(f"=8 : {g1__large:0.16f}  {g1__large_min:0.16f}  {g1__small:0.16f}  {g1__small_min:0.16f}  ")
-
-g1__large, g1__large_min, g1__small, g1__small_min = calc_data_boundary(g1_abs, g1_zero__mask, topk_sample_num=16)
-print(f"=16: {g1__large:0.16f}  {g1__large_min:0.16f}  {g1__small:0.16f}  {g1__small_min:0.16f}  ")
-
-exit()
-
-VAL_LARGE_SAMPLE_NUM = 8
-VAL_SMALL_SAMPLE_NUM = 8
-
-# val_large = mean(topk(data_abs, VAL_LARGE_SAMPLE_NUM))
-# val_large_min = val_large * VAL_PRECISION_BF16    # scale down
-
-# data_abs_nonzero = (data_abs[data_abs == 0.0] = val_large)
-# val_small = mean(topk(data_abs_nonzero, VAL_SMALL_SAMPLE_NUM, largest=False))
-# val_small_min = val_small / VAL_PRECISION_BF16    # scale up
-
-# val_small_min = min(val_large_min, val_small_min)
-
-# data_large = data[data_abs > val_large_min]
-# data_tiny = data[data_abs < val_small_min]
-# data_small = NOT(data_large, data_tiny)
-########
-
+all_sum = torch.sum(torch.stack([g0, a0, b0]), dim=0)
+all_finite__mask = torch.where(torch.isfinite(all_sum), torch.tensor(1.0, dtype=torch.float64), torch.tensor(0.0, dtype=torch.float64))
+all_finite__num = calc_mask_num(all_finite__mask)
+if is_debug:
+    print("all fnt,", all_finite__mask)
 
 # mark: any zero
-if False:   # mark any zero data
-    any_zero__mask = torch.sum(torch.stack([g1_zero__mask, a1_zero__mask, b1_zero__mask]), dim=0)
-    if is_check_finite:
-        any_zero__mask = torch.mul(any_zero__mask, all_finite__mask)
-    any_zero__mask = torch.where(any_zero__mask > 0.0, torch.tensor(1.0, dtype=torch.float64), torch.tensor(0.0, dtype=torch.float64))
-    any_zero__num = calc_mask_num(any_zero__mask)
-else:   # mark golden zero data
-    any_zero__mask = g1_zero__mask
-    any_zero__num = g1_zero__num
-
+any_zero__mask = torch.sum(torch.stack([g1_zero__mask, a1_zero__mask, b1_zero__mask]), dim=0)
+any_zero__mask = torch.mul(any_zero__mask, all_finite__mask)
+any_zero__mask = torch.where(any_zero__mask > 0.0, torch.tensor(1.0, dtype=torch.float64), torch.tensor(0.0, dtype=torch.float64))
+any_zero__num = calc_mask_num(any_zero__mask)
 if is_debug:
     print("any zero,", any_zero__mask)
 
 # mark: all small calibrate
-#val_small_num_limit = min(VAL_RELATIVE_SMALL_LIMIT_NUM_MAX, all_finite__num * VAL_RELATIVE_SMALL_LIMIT_RATIO_MAX)
-val_small_num_limit = VAL_RELATIVE_SMALL_LIMIT_NUM_MAX
+val_small_num_limit = min(VAL_RELATIVE_SMALL_LIMIT_NUM_MAX, all_finite__num * VAL_RELATIVE_SMALL_LIMIT_RATIO_MAX)
 any_zero__mask_ = torch.mul(any_zero__mask, 3.0)
-#for val_small__found in VAL_RELATIVE_SMALL_LIST_SORTED:
-for val_small__found in [val_small_candidate]:
+for val_small__found in VAL_RELATIVE_SMALL_LIST_SORTED:
     g1_small__mask = torch.where(g1_abs < val_small__found, torch.tensor(1.0, dtype=torch.float64), torch.tensor(0.0, dtype=torch.float64))
     a1_small__mask = torch.where(a1_abs < val_small__found, torch.tensor(1.0, dtype=torch.float64), torch.tensor(0.0, dtype=torch.float64))
     b1_small__mask = torch.where(b1_abs < val_small__found, torch.tensor(1.0, dtype=torch.float64), torch.tensor(0.0, dtype=torch.float64))
     any_small__mask = torch.sum(torch.stack([g1_small__mask, a1_small__mask, b1_small__mask]), dim=0)
     any_small__mask = torch.sub(any_small__mask, any_zero__mask_)
-    if is_check_finite:
-        any_small__mask = torch.mul(any_small__mask, all_finite__mask)
+    any_small__mask = torch.mul(any_small__mask, all_finite__mask)
     any_small__mask = torch.where(any_small__mask > 0.0, torch.tensor(1.0, dtype=torch.float64), torch.tensor(0.0, dtype=torch.float64))
     any_small__num = calc_mask_num(any_small__mask)
     if any_small__num >= val_small_num_limit:
         break
 
 # mark: all large
-if is_check_finite:
-    all_large__mask = torch.sub(all_finite__mask, torch.add(any_zero__mask, any_small__mask))
-else:
-    all_large__mask = torch.sub(1.0, torch.add(any_zero__mask, any_small__mask))
+all_large__mask = torch.sub(all_finite__mask, torch.add(any_zero__mask, any_small__mask))
 all_large__num = calc_mask_num(all_large__mask)
 if is_debug:
     print(all_large__mask)
@@ -312,11 +162,19 @@ b1_total__num, b1_larg__num, b1_omit__num = calc_data_value_info(b1_abs, b1_zero
 #
 # all: data information
 print(f"_INFO,total,large,small_{val_small__found},zero,inf,nan,max,min,absavg,file")
-print(f"G,{g1_total__num},{g1_larg__num},{g1_omit__num},{g1_zero__num},{g1_inf__num},{g1_nan__num},{g1__max:0.16f},{g1__min:0.16f},{g1_abs__avg:0.16f},{fn_g},  {g1_abs__max_topk:0.16f},{g1_abs__min_topk:0.16f}")
-print(f"A,{a1_total__num},{a1_larg__num},{a1_omit__num},{a1_zero__num},{a1_inf__num},{a1_nan__num},{a1__max:0.16f},{a1__min:0.16f},{a1_abs__avg:0.16f},{fn_a},  {a1_abs__max_topk:0.16f},{a1_abs__min_topk:0.16f}")
-print(f"B,{b1_total__num},{b1_larg__num},{b1_omit__num},{b1_zero__num},{b1_inf__num},{b1_nan__num},{b1__max:0.16f},{b1__min:0.16f},{b1_abs__avg:0.16f},{fn_b},  {b1_abs__max_topk:0.16f},{b1_abs__min_topk:0.16f}")
+print(f"Gold,{g1_total__num},{g1_larg__num},{g1_omit__num},{g1_zero__num},{g1_inf__num},{g1_nan__num},{g1__max:0.10f},{g1__min:0.10f},{g1_abs__avg:0.10f},{fn_g}")
+print(f"A,{a1_total__num},{a1_larg__num},{a1_omit__num},{a1_zero__num},{a1_inf__num},{a1_nan__num},{a1__max:0.10f},{a1__min:0.10f},{a1_abs__avg:0.10f},{fn_a}")
+print(f"B,{b1_total__num},{b1_larg__num},{b1_omit__num},{b1_zero__num},{b1_inf__num},{b1_nan__num},{b1__max:0.10f},{b1__min:0.10f},{b1_abs__avg:0.10f},{fn_b}")
 
-exit()
+# all: dtype shaping by cast
+if dtype_adjust_to == "bf16":
+    g1 = g1.type(torch.bfloat16).type(torch.float64)
+    a1 = a1.type(torch.bfloat16).type(torch.float64)
+    b1 = b1.type(torch.bfloat16).type(torch.float64)
+elif dtype_adjust_to == "fp16":
+    g1 = g1.type(torch.float16).type(torch.float64)
+    a1 = a1.type(torch.float16).type(torch.float64)
+    b1 = b1.type(torch.float16).type(torch.float64)
 
 # func: calc adiff/rdiff
 def calc_diff(A, B, pick_mask=None, pick_num=None, is_relative=False, topk_num=0):
@@ -391,8 +249,8 @@ def measure_diff3(G, A, B, mask, num, is_relative=False, topk_num=8, info=None, 
     else:
         _info = info
     print(f"{_info}_v{VER},avg_{num},avghi_{ga_hi__num}_{gb_hi__num},avglo_{ga_lo__num}_{gb_lo__num},top_{gb_topk__num}_{gb_topk__num}")
-    print("GA," + ','.join('{:0.16f}'.format(i) for i in [ga__avg, ga_hi__avg, ga_lo__avg, ga_topk__avg]))
-    print("GB," + ','.join('{:0.16f}'.format(i) for i in [gb__avg, gb_hi__avg, gb_lo__avg, gb_topk__avg]))
+    print("Gold-vs-A," + ','.join('{:0.10f}'.format(i) for i in [ga__avg, ga_hi__avg, ga_lo__avg, ga_topk__avg]))
+    print("Gold-vs-B," + ','.join('{:0.10f}'.format(i) for i in [gb__avg, gb_hi__avg, gb_lo__avg, gb_topk__avg]))
     is_pass_avg = is_le_(gb__avg,ga__avg, 0.0, 0.0)
     is_pass_avghi = is_le_(gb_hi__avg,ga_hi__avg, 0.0, 0.0)
     is_pass_avglo = is_le_(gb_lo__avg,ga_lo__avg, 0.0, 0.0)
@@ -454,11 +312,11 @@ if True:    # functional 20231102-v1
     tol_rel_large = [0.3, 0.3, 0.3, 1]
 
 # measure: Absolute Diff for data containing zero
-zero_avg, zero_avghi, zero_avglo, zero_topk, zero_avg_, zero_avghi_, zero_avglo_, zero_topk_ = measure_diff3(g1, a1, b1, any_zero__mask, any_zero__num, is_relative=False, topk_num=4, info="_AD__ZERO", tol_abs=tol_abs_zero, tol_rel=tol_rel_zero)
+zero_avg, zero_avghi, zero_avglo, zero_topk, zero_avg_, zero_avghi_, zero_avglo_, zero_topk_ = measure_diff3(g1, a1, b1, any_zero__mask, any_zero__num, is_relative=False, topk_num=0, info="_AD__ZERO", tol_abs=tol_abs_zero, tol_rel=tol_rel_zero)
 # measure: Absolute Diff for data containing small value
-small_avg, small_avghi, small_avglo, small_topk, small_avg_, small_avghi_, small_avglo_, small_topk_ = measure_diff3(g1, a1, b1, any_small__mask, any_small__num, is_relative=False, topk_num=4, info=f"_AD_SMALL_{val_small__found}", tol_abs=tol_abs_small, tol_rel=tol_rel_small)
+small_avg, small_avghi, small_avglo, small_topk, small_avg_, small_avghi_, small_avglo_, small_topk_ = measure_diff3(g1, a1, b1, any_small__mask, any_small__num, is_relative=False, topk_num=0, info=f"_AD_SMALL_{val_small__found}", tol_abs=tol_abs_small, tol_rel=tol_rel_small)
 # measure: Relative Diff for data containing large value
-large_avg, large_avghi, large_avglo, large_topk, large_avg_, large_avghi_, large_avglo_, large_topk_ = measure_diff3(g1, a1, b1, all_large__mask, all_large__num, is_relative=True, topk_num=4, info="_RD_LARGE", tol_abs=tol_abs_large, tol_rel=tol_rel_large)
+large_avg, large_avghi, large_avglo, large_topk, large_avg_, large_avghi_, large_avglo_, large_topk_ = measure_diff3(g1, a1, b1, all_large__mask, all_large__num, is_relative=True, topk_num=0, info="_RD_LARGE", tol_abs=tol_abs_large, tol_rel=tol_rel_large)
 
 # decision
 is_passed_zero = zero_avg_ and zero_avghi_ and zero_avglo_ and zero_topk_
