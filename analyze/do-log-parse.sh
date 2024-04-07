@@ -9,7 +9,7 @@ FO_BATCH="out--$TS-batch.csv"
 
 sed_opt_gen_re_pre() {
        	_ID=0; GREP_OPT_FILTER_RE="";
-       	SED_OPT1_N="case_$VER"; SED_OPT1_K=".*"; SED_OPT1_V_=":"; 
+       	SED_OPT1_N="case_v$VER"; SED_OPT1_K=".*"; SED_OPT1_V_=":"; 
        	SED_OPT2_N=""; SED_OPT2_K=".*"; SED_OPT2_V_=""; 
 }
 sed_opt_gen_re() {     	# <name> <group_total> <pattern_with_group>
